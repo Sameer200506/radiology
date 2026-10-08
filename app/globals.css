@@ -1,26 +1,405 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------ *
+ * MedAssist AI — design tokens
+ *
+ * A single teal/violet accent system on a near-neutral canvas.
+ * Glass surfaces are layered via --glass-* variables so the marketing
+ * site, dashboard and wizard all read as one product.
+ * ------------------------------------------------------------------ */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-canvas: hsl(var(--canvas));
+  --color-surface: hsl(var(--surface));
+  --color-elevated: hsl(var(--elevated));
+  --color-line: hsl(var(--line));
+  --color-line-strong: hsl(var(--line-strong));
+
+  --color-ink: hsl(var(--ink));
+  --color-muted: hsl(var(--muted));
+  --color-subtle: hsl(var(--subtle));
+
+  --color-brand: hsl(var(--brand));
+  --color-brand-soft: hsl(var(--brand-soft));
+  --color-brand-strong: hsl(var(--brand-strong));
+  --color-accent: hsl(var(--accent));
+  --color-accent-soft: hsl(var(--accent-soft));
+
+  --color-critical: hsl(var(--critical));
+  --color-caution: hsl(var(--caution));
+  --color-caution-soft: hsl(var(--caution-soft));
+  --color-good: hsl(var(--good));
+  --color-info: hsl(var(--info));
+
+  --radius-glass: 1.5rem;
+
+  --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-float: float 9s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-gradient: gradient 18s ease infinite;
+  --animate-scan: scan 3.4s ease-in-out infinite;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: 210 40% 98%;
+  --surface: 0 0% 100%;
+  --elevated: 210 40% 99%;
+  --line: 214 32% 90%;
+  --line-strong: 214 25% 82%;
+
+  --ink: 222 47% 11%;
+  --muted: 215 20% 40%;
+  --subtle: 215 16% 52%;
+
+  --brand: 173 78% 34%;
+  --brand-soft: 170 60% 94%;
+  --brand-strong: 175 80% 26%;
+  --accent: 262 74% 58%;
+  --accent-soft: 262 80% 96%;
+
+  --critical: 358 72% 47%;
+  --caution: 32 92% 44%;
+  --caution-soft: 40 92% 95%;
+  --good: 152 58% 34%;
+  --info: 205 88% 44%;
+
+  --glass-bg: 255 255 255;
+  --glass-alpha: 0.66;
+  --glass-border: 255 255 255;
+  --glass-border-alpha: 0.7;
+
+  --shadow-glass: 0 1px 2px hsl(222 47% 11% / 0.04), 0 12px 32px -12px hsl(222 47% 11% / 0.16);
+  --shadow-lift: 0 2px 4px hsl(222 47% 11% / 0.05), 0 24px 48px -20px hsl(222 47% 11% / 0.28);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.dark {
+  --canvas: 224 42% 7%;
+  --surface: 223 36% 10%;
+  --elevated: 223 32% 13%;
+  --line: 220 26% 20%;
+  --line-strong: 220 22% 28%;
+
+  --ink: 210 30% 96%;
+  --muted: 216 18% 72%;
+  --subtle: 216 14% 60%;
+
+  --brand: 168 68% 46%;
+  --brand-soft: 172 60% 14%;
+  --brand-strong: 168 72% 58%;
+  --accent: 262 82% 70%;
+  --accent-soft: 262 50% 16%;
+
+  --critical: 358 82% 66%;
+  --caution: 36 92% 60%;
+  --caution-soft: 34 60% 15%;
+  --good: 152 52% 52%;
+  --info: 205 92% 66%;
+
+  --glass-bg: 24 32%;
+  --glass-alpha: 0.5;
+  --glass-border: 210 40%;
+  --glass-border-alpha: 0.12;
+
+  --shadow-glass: 0 1px 2px hsl(0 0% 0% / 0.4), 0 12px 32px -12px hsl(0 0% 0% / 0.6);
+  --shadow-lift: 0 2px 4px hsl(0 0% 0% / 0.4), 0 24px 48px -20px hsl(0 0% 0% / 0.75);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: hsl(var(--line));
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: hsl(var(--canvas));
+    color: hsl(var(--ink));
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-wrap: break-word;
+  }
+
+  /* Visible, high-contrast focus for keyboard users only. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--brand));
+    outline-offset: 2px;
+    border-radius: 0.35rem;
+  }
+
+  ::selection {
+    background: hsl(var(--brand) / 0.24);
+  }
+
+  /* Slim scrollbars that respect the theme. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--line-strong)) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--line-strong));
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* ---- Glass surfaces ---------------------------------------- */
+  .glass {
+    background-color: hsl(var(--glass-bg) / var(--glass-alpha));
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid hsl(var(--glass-border) / var(--glass-border-alpha));
+    box-shadow: var(--shadow-glass);
+  }
+
+  .glass-strong {
+    background-color: hsl(var(--glass-bg) / calc(var(--glass-alpha) + 0.2));
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid hsl(var(--glass-border) / calc(var(--glass-border-alpha) + 0.24));
+    box-shadow: var(--shadow-lift);
+  }
+
+  .glass-subtle {
+    background-color: hsl(var(--surface) / 0.42);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--line));
+  }
+
+  /* ---- Ambient background ------------------------------------ */
+  .aurora {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .aurora::before,
+  .aurora::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.5;
+  }
+
+  .aurora::before {
+    width: 46rem;
+    height: 46rem;
+    top: -18rem;
+    left: -14rem;
+    background: radial-gradient(circle, hsl(var(--brand) / 0.55), transparent 68%);
+  }
+
+  .aurora::after {
+    width: 40rem;
+    height: 40rem;
+    bottom: -16rem;
+    right: -12rem;
+    background: radial-gradient(circle, hsl(var(--accent) / 0.45), transparent 68%);
+  }
+
+  .dark .aurora::before,
+  .dark .aurora::after {
+    opacity: 0.32;
+  }
+
+  /* Fine grid that reads as texture, not noise. */
+  .grid-texture {
+    background-image:
+      linear-gradient(to right, hsl(var(--line) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--line) / 0.5) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  }
+
+  /* ---- Text treatments --------------------------------------- */
+  .text-gradient {
+    background-image: linear-gradient(
+      100deg,
+      hsl(var(--ink)) 8%,
+      hsl(var(--brand)) 46%,
+      hsl(var(--accent)) 88%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .eyebrow {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: hsl(var(--subtle));
+  }
+
+  /* ---- Skeletons --------------------------------------------- */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--line) / 0.5) 25%,
+      hsl(var(--line) / 0.9) 37%,
+      hsl(var(--line) / 0.5) 63%
+    );
+    background-size: 400% 100%;
+    animation: var(--animate-shimmer);
+    border-radius: 0.75rem;
+  }
+
+  /* ---- Urgency is never colour-only --------------------------- */
+  .urgency-stripe {
+    position: relative;
+  }
+
+  .urgency-stripe::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 4px;
+    border-start-start-radius: inherit;
+    border-end-start-radius: inherit;
+    background: currentColor;
+  }
+}
+
+@layer utilities {
+  .animate-shimmer {
+    animation: var(--animate-shimmer);
+  }
+
+  .animate-float {
+    animation: var(--animate-float);
+  }
+
+  .animate-pulse-ring {
+    animation: var(--animate-pulse-ring);
+  }
+
+  .animate-gradient {
+    animation: var(--animate-gradient);
+  }
+
+  .animate-scan {
+    animation: var(--animate-scan);
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Print: report view only, no chrome. */
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+
+    .print-full {
+      box-shadow: none !important;
+      border-color: #d4d4d8 !important;
+      background: #fff !important;
+      backdrop-filter: none !important;
+    }
+
+    body {
+      background: #fff !important;
+      color: #111 !important;
+    }
+
+    @page {
+      margin: 14mm;
+    }
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes gradient {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-110%);
+  }
+  100% {
+    transform: translateY(410%);
+  }
 }

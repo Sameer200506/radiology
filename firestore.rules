@@ -1,0 +1,292 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// MedAssist AI — Firestore Security Rules
+//
+// These rules ARE the access-control boundary. The data layer runs in the
+// browser (`lib/firebase/repositories-client.ts`), so every read and write is
+// checked here inside Firebase and cannot be bypassed by a modified browser.
+//
+// Consequence to be explicit about: because the client writes its own analysis
+// records, the rules can guarantee WHO may write WHAT, but not that the payload
+// was produced by the AI pipeline. The server routes remain authoritative for
+// triage: `/api/ai/*` re-runs the deterministic red-flag rules on every request,
+// so a tampered client cannot talk the product into a lower urgency.
+//
+// Ownership model
+//   users/{userId}                       owner = auth.uid
+//     /auditLogs/{logId}                 owner = auth.uid (create only)
+//   assessments/{assessmentId}           owner = resource.data.userId
+//     /answers/{answerId}                inherits the parent assessment
+//     /uploads/{uploadId}                inherits the parent assessment
+//     /analysis/{analysisId}             inherits the parent assessment
+//   reports/{reportId}                   owner = resource.data.userId
+//
+// Deploy with:
+//   firebase deploy --only firestore:rules
+// ---------------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- users
+    match /users/{userId} {
+
+      // Self-provisioning: the path must equal the caller's uid, so creating
+      // another user's profile is impossible.
+      allow get, create: if isSignedIn()
+                         && isOwner(userId)
+                         && request.resource.data.uid == request.auth.uid
+                         && validUserProfile(request.resource.data);
+
+      allow list: if false;
+
+      allow update: if isSignedIn()
+                    && isOwner(userId)
+                    && resource.data.uid == request.auth.uid
+                    && validUserProfile(request.resource.data)
+                    && uidUnchanged();
+
+      // The profile is not deletable on its own: account deletion must first cascade
+      // through every child record, and that cascade ends by removing this
+      // document. Allowing an unconditional delete here would let a user orphan
+      // their assessments with no way to clean them up afterwards.
+      allow delete: if isSignedIn()
+                    && isOwner(userId)
+                    && !exists(/databases/$(database)/documents/assessments)
+                    && !exists(/databases/$(database)/documents/users/$(userId)/auditLogs);
+
+      // Append-only audit trail. A client may record events about itself and
+      // may read them, but may never alter or remove one.
+      match /auditLogs/{logId} {
+        allow read: if isSignedIn() && isOwner(userId);
+        allow create: if isSignedIn()
+                      && isOwner(userId)
+                      && validAuditLog(request.resource.data);
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------------------------------------------------------- assessments
+    match /assessments/{assessmentId} {
+
+      // NOTE: document-level rules read `resource.data.userId` directly and must
+      // NOT call a helper that performs get() on this same path. Firestore
+      // evaluates that get() against these same rules, which would recurse and
+      // fail every read. Helpers that read the PARENT document (used by the
+      // sub-collections below) are fine — that is a different path.
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && validAssessment(request.resource.data);
+      allow update: if isSignedIn()
+                    && resource.data.userId == request.auth.uid
+                    && validAssessment(request.resource.data)
+                    && userIdUnchanged();
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // ------------------------------------------------------- sub-collections
+
+      match /answers/{answerId} {
+        allow read: if isSignedIn() && ownsAssessment(assessmentId);
+        allow create, update: if isSignedIn()
+                              && ownsAssessment(assessmentId)
+                              && request.resource.data.userId == request.auth.uid;
+        allow delete: if isSignedIn() && ownsAssessment(assessmentId);
+      }
+
+      match /uploads/{uploadId} {
+        allow read: if isSignedIn() && ownsAssessment(assessmentId);
+
+        allow create: if isSignedIn()
+                      && ownsAssessment(assessmentId)
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.assessmentId == assessmentId
+                      && request.resource.data.sizeBytes is int
+                      && request.resource.data.sizeBytes <= 10485760 // 10 MB, mirrors MAX_FILE_BYTES
+                      && request.resource.data.contentHash is string
+                      && request.resource.data.contentHash.size() <= 128
+                      && pathMatchesUpload(request.resource.data.storagePath, assessmentId);
+
+        // Only the analysis status and metadata may change after upload. The file
+        // bytes live in Storage; identity fields are pinned so a client cannot
+        // repoint the record at a different file.
+        allow update: if isSignedIn()
+                      && ownsAssessment(assessmentId)
+                      && request.resource.data.userId == resource.data.userId
+                      && request.resource.data.storagePath == resource.data.storagePath
+                      && request.resource.data.contentHash == resource.data.contentHash
+                      && request.resource.data.sizeBytes == resource.data.sizeBytes
+                      && request.resource.data.assessmentId == resource.data.assessmentId
+                      && request.resource.data.mimeType == resource.data.mimeType;
+
+        allow delete: if isSignedIn() && ownsAssessment(assessmentId);
+      }
+
+      // Analysis records. The browser writes these after the server has
+      // validated the model output, so the rules enforce ownership and shape
+      // rather than provenance. Content is immutable once written: re-running an
+      // assessment creates a new record and keeps the history.
+      match /analysis/{analysisId} {
+        allow read: if isSignedIn() && ownsAssessment(assessmentId);
+        allow create: if isSignedIn()
+                      && ownsAssessment(assessmentId)
+                      && request.resource.data.assessmentId == assessmentId
+                      && validAnalysis(request.resource.data);
+        allow update: if false;
+
+        // Deletion is required, not optional: account deletion cascades through
+        // this collection, and leaving clinical records behind because the rules
+        // forbade their removal would be worse than permitting it. The owner
+        // check runs first, so a live assessment's analyses stay until the
+        // cascade reaches them.
+        allow delete: if isSignedIn()
+                      && (ownsAssessment(assessmentId)
+                          || !exists(/databases/$(database)/documents/assessments/$(assessmentId)));
+      }
+    }
+
+    // -------------------------------------------------------------- reports
+    match /reports/{reportId} {
+
+      // A shared report is readable by link: that is the entire point of the
+      // feature. The share token must match the record's own token, so a
+      // document that has not been shared cannot be guessed into existence.
+      allow get: if isSharedReport(resource.data, reportId)
+                 || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      // Listing stays owner-only. Without this, an unauthenticated list would be
+      // evaluated per document and leak the shape of unshared records.
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.shareEnabled == false
+                    && validReport(request.resource.data);
+
+      // Sharing may be toggled by the owner. The rules do not mint the token —
+      // they only ensure a client cannot enable sharing on someone else's
+      // report, nor change the owner.
+      allow update: if isSignedIn()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.assessmentId == resource.data.assessmentId
+                    && validReport(request.resource.data)
+                    // Turning sharing off must remove the snapshot in the same write, so an old
+      // link cannot keep serving the assessment. Stated as "you may not disable
+      // sharing while leaving the snapshot in place" rather than referencing
+      // `resource.data.sharedAnalysis`, which may not exist on a never-shared
+      // report.
+      && (request.resource.data.shareEnabled == true
+          || request.resource.data.sharedAnalysis == null);
+
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // ---------------------------------------------------- catch-all default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ======================================================================
+    // Helpers
+    // ======================================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function ownsAssessment(assessmentId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/assessments/$(assessmentId))
+        && get(/databases/$(database)/documents/assessments/$(assessmentId)).data.userId == request.auth.uid;
+    }
+
+    // A shared report is readable through its own document id, which is the share
+    // token. Requiring `shareId == reportId` means a client cannot enable sharing
+    // with a token that points at a different record.
+    function isSharedReport(data, reportId) {
+      return data.shareEnabled == true
+        && data.shareId == reportId;
+    }
+
+    function validUserProfile(data) {
+      return data.keys().hasOnly([
+             'uid','email','displayName','photoURL','createdAt','updatedAt',
+             'defaultAge','defaultSex','isDemo','settings'
+           ])
+          && data.uid is string
+          && data.displayName is string
+          && data.displayName.size() <= 80;
+    }
+
+    function validAuditLog(data) {
+      return data.keys().hasOnly(['action','resourceType','resourceId','at','metadata'])
+        && data.action is string
+        && data.action.size() <= 64
+        && data.resourceType in ['assessment','upload','report','auth','session']
+        && data.at is string;
+    }
+
+    function uidUnchanged() {
+      return request.resource.data.uid == resource.data.uid;
+    }
+
+    function userIdUnchanged() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    function validAssessment(data) {
+      return data.keys().hasOnly([
+             'id','userId','title','symptomSummary','status','stage',
+             'urgency','fileCount','isDemo','createdAt','updatedAt','caseData'
+           ])
+          && data.userId == request.auth.uid
+          && data.id is string
+          && data.title is string
+          && data.title.size() <= 160
+          && data.symptomSummary is string
+          && data.symptomSummary.size() <= 200
+          && data.status in ['draft','in_progress','analyzing','complete','failed']
+          && data.fileCount is int
+          && data.fileCount >= 0
+          && data.fileCount <= 20
+          && data.isDemo is bool;
+    }
+
+    function validAnalysis(data) {
+      return data.keys().hasOnly([
+             'id','assessmentId','createdAt','triage','result','caseData','audit'
+           ])
+          && data.id is string
+          && data.createdAt is string
+          && data.triage is map
+          && data.result is map
+          && data.caseData is map
+          && data.audit is map;
+    }
+
+    function validReport(data) {
+      return data.keys().hasOnly([
+             'id','userId','assessmentId','title','createdAt',
+             'shareId','shareEnabled','sharedAnalysis'
+           ])
+          && data.title is string
+          && data.title.size() <= 160
+          && data.shareEnabled is bool
+          && (data.shareEnabled == false
+                ? data.shareId == null
+                : data.shareId is string && data.shareId.size() > 0 && data.shareId.size() <= 128);
+    }
+
+    function pathMatchesUpload(storagePath, assessmentId) {
+      return storagePath is string
+        && storagePath.size() <= 400
+        && storagePath.matches('users/' + request.auth.uid + '/' + assessmentId + '/[A-Za-z0-9_-]{1,128}[.][A-Za-z0-9]{1,10}');
+    }
+  }
+}

@@ -1,0 +1,98 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// MedAssist AI — Firebase Storage Security Rules
+//
+// The data layer runs in the browser, so files are uploaded and read directly
+// with the client SDK. These rules are therefore the whole boundary:
+//
+//   write  only under `users/{uid}/…`, only by that uid, only for an allowed
+//         content type, only under the size cap, and never publicly cacheable.
+//   read   only by the owner. A leaked download URL is only usable while that
+//         person's session token is valid.
+//   delete only by the owner.
+//
+// Note on URL lifetime: unlike the previous server-minted signed URLs, a
+// Firebase download token in the browser is only as strong as the rules above,
+// so "short-lived URL" is no longer a property this design can claim.
+// ---------------------------------------------------------------------------
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /users/{userId}/{assessmentId}/{fileId} {
+
+      // ---- create ---------------------------------------------------------
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && validId(assessmentId)
+                    && validFileId(fileId)
+                    && isAllowedType()
+                    && request.resource.size <= 10 * 1024 * 1024
+                    && validMetadata();
+
+      // ---- update ---------------------------------------------------------
+      // Overwrite is refused outright. An update can change contentType or size
+      // without re-running the create checks, which would let a small permitted
+      // placeholder be swapped for a file the create rule would have rejected.
+      allow update: if false;
+
+      // ---- read -----------------------------------------------------------
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // ---- delete ---------------------------------------------------------
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId
+                    && validId(assessmentId)
+                    && validFileId(fileId);
+    }
+
+    // Anything outside the namespaced layout is unreachable.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // ======================================================================
+    // Helpers
+    // ======================================================================
+
+    function validId(value) {
+      return value is string && value.size() > 0 && value.size() <= 128
+        && value.matches('[A-Za-z0-9_-]+');
+    }
+
+    // e.g. "0f3a…c19.pdf" — an id plus a single short extension.
+    function validFileId(value) {
+      return value is string
+        && value.size() > 2
+        && value.size() <= 160
+        && value.matches('[A-Za-z0-9_-]+[.][A-Za-z0-9]+');
+    }
+
+    function isAllowedType() {
+      return request.resource.contentType in [
+               'application/pdf',
+               'application/x-pdf',
+               'image/jpeg',
+               'image/png',
+               'image/webp',
+               'image/bmp',
+               'image/tiff',
+               'image/avif'
+             ];
+    }
+
+    function validMetadata() {
+      // Defence in depth, not the primary control. Firebase Storage objects are
+      // private by default and the web SDK cannot grant public access, so
+      // requiring an explicit header here would be redundant — and the web SDK
+      // has no way to set a top-level cacheControl at all, so requiring its
+      // presence would reject every legitimate upload.
+      //
+      // Where the app does send a cache-control hint, it must not be public.
+      return request.resource.metadata == null
+        || request.resource.metadata.cacheControl == null
+        || request.resource.metadata.cacheControl.matches('.*private.*');
+    }
+  }
+}
