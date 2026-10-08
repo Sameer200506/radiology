@@ -25,22 +25,43 @@ const REQUIRED_KEYS = [
 
 type RequiredKey = FirebaseEnvKey;
 
+/**
+ * Every value read through an explicit `process.env.NEXT_PUBLIC_*` literal.
+ *
+ * This must NOT be written as `process.env[key]` in a loop. Next.js replaces a
+ * *literal* `process.env.NEXT_PUBLIC_FOO` member expression with the value at
+ * build time, but a dynamic bracket lookup is not statically analysable and is
+ * left as a runtime `process.env` access — which does not exist in the browser.
+ * Reading the vars dynamically therefore returned undefined for every key, and
+ * the app reported "Authentication is not configured yet" while the values were
+ * sitting right there in the client bundle.
+ *
+ * Keeping the reads literal here also means the missing-key check below and the
+ * config object are derived from the same source, so the two can never disagree.
+ */
+const ENV: Record<RequiredKey, string | undefined> = {
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
 function readConfig(): FirebaseClientEnv {
-  const missing: RequiredKey[] = REQUIRED_KEYS.filter(
-    (key): key is RequiredKey => !process.env[key]?.trim(),
-  );
+  const missing: RequiredKey[] = REQUIRED_KEYS.filter((key) => !ENV[key]?.trim());
 
   if (missing.length > 0) {
     return { config: null, configured: false, missing: [...missing] };
   }
 
   const config: FirebaseClientConfig = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY as string,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN as string,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID as string,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET as string,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID as string,
+    apiKey: ENV.NEXT_PUBLIC_FIREBASE_API_KEY as string,
+    authDomain: ENV.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN as string,
+    projectId: ENV.NEXT_PUBLIC_FIREBASE_PROJECT_ID as string,
+    storageBucket: ENV.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET as string,
+    messagingSenderId: ENV.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
+    appId: ENV.NEXT_PUBLIC_FIREBASE_APP_ID as string,
   };
 
   return { config, configured: true, missing: [] };
