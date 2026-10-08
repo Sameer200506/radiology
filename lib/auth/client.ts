@@ -82,7 +82,55 @@ function mapAuthError(error: unknown): string {
     case "auth/operation-not-allowed":
       return "That sign-in method is not enabled for this project.";
     default:
-      return "Something went wrong signing in. Please try again.";
+      break;
+  }
+
+  // Network-layer failures never carry a Firebase code, so they fall through to
+  // here. A timeout is distinguished from a hard failure because the remedy
+  // differs: one is usually a blocked request, the other a wrong credential.
+  if (/did not respond within/.test(String((error as { message?: string }).message ?? ""))) {
+    return "We could not reach the sign-in service. Check your internet connection, then try again.";
+  }
+
+  if (code.startsWith("auth/") || code.startsWith("auth:")) {
+    return "Something went wrong signing in. Please try again.";
+  }
+
+  return "Could not reach the sign-in service. Check your connection and try again.";
+}
+
+/**
+ * Firebase's own promises have no timeout. If `identitytoolkit.googleapis.com` is
+ * unreachable — corporate proxy, ad blocker, captive portal, DNS block — the
+ * request can sit pending indefinitely, which showed up in the UI as a "Sign
+ * in" button spinning forever with no message and nothing in the console.
+ *
+ * Wrapping every credential operation in a deadline converts that silence into
+ * an actionable error. The user is told what to check instead of being left
+ * staring at a spinner.
+ */
+const AUTH_TIMEOUT_MS = 20_000;
+
+async function withTimeout<T>(operation: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Firebase ${label} did not respond within ${AUTH_TIMEOUT_MS / 1000}s.`,
+              ),
+            ),
+          AUTH_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -163,7 +211,7 @@ export async function signInWithGoogle(): Promise<AuthResult> {
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    const credential = await signInWithPopup(auth, provider);
+    const credential = await withTimeout(signInWithPopup(auth, provider), "Google sign-in");
     await syncSessionCookie(credential.user);
     return { ok: true };
   } catch (error) {
@@ -177,7 +225,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
     return { ok: false, error: "Sign-in is not configured on this deployment." };
   }
   try {
-    const credential = await signInWithEmailAndPassword(auth, email, password);
+    const credential = await withTimeout(signInWithEmailAndPassword(auth, email, password), "sign-in");
     await syncSessionCookie(credential.user);
     return { ok: true };
   } catch (error) {
@@ -195,7 +243,7 @@ export async function signUpWithEmail(
     return { ok: false, error: "Sign-up is not configured on this deployment." };
   }
   try {
-    const credential = await createUserWithEmailAndPassword(auth, email, password);
+    const credential = await withTimeout(createUserWithEmailAndPassword(auth, email, password), "sign-up");
     if (displayName.trim().length > 0) {
       await updateProfile(credential.user, { displayName: displayName.trim() });
     }
@@ -212,7 +260,7 @@ export async function sendReset(email: string): Promise<AuthResult> {
     return { ok: false, error: "Password reset is not configured on this deployment." };
   }
   try {
-    await sendPasswordResetEmail(auth, email);
+    await withTimeout(sendPasswordResetEmail(auth, email), "password reset");
     return { ok: true };
   } catch (error) {
     return { ok: false, error: mapAuthError(error) };

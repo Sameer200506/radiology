@@ -114,11 +114,39 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const redirectTo = safeRedirectTarget(searchParams.get("next"));
   const configured = isFirebaseConfigured();
 
+  /**
+   * Navigate once Firebase reports a signed-in user.
+   *
+   * Clearing `busy` here matters: sign-in succeeds, this effect runs, and the
+   * navigation may take a moment — or bounce back here if the session cookie did
+   * not survive. Leaving the button spinning through all of that told the user
+   * nothing had happened while it was in fact mid-redirect.
+   *
+   * The attempt counter is a backstop against a redirect loop. The proxy sends
+   * an authenticated-but-cookieless visitor from /dashboard back to
+   * /login?next=/dashboard, which would re-trigger this effect indefinitely.
+   * Rather than spinning forever, say what is actually wrong.
+   */
+  const attemptsRef = React.useRef(0);
+
   React.useEffect(() => {
-    if (ready && user) {
-      router.replace(redirectTo);
+    if (!ready || !user) {
+      attemptsRef.current = 0;
+      return;
     }
-  }, [ready, user, router, redirectTo]);
+
+    setBusy(null);
+
+    if (attemptsRef.current > 0) {
+      setError(
+        "You are signed in, but the browser could not keep the session. This usually means cookies are blocked for this site, or it is being opened over plain HTTP on a network address. Allow cookies for this site and try again.",
+      );
+      return;
+    }
+
+    attemptsRef.current += 1;
+    router.replace(redirectTo);
+  }, [ready, user, router, redirectTo, setBusy]);
 
   const runGoogle = async () => {
     setError(null);

@@ -18,6 +18,7 @@ import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
   idTokenMaxAgeSeconds,
+  isSecureRequest,
   sessionCookieOptions,
   verifyToken,
 } from "@/lib/auth/session";
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
     }
 
     const store = await cookies();
-    store.set(SESSION_COOKIE, cookieValue, sessionCookieOptions(maxAge));
+    store.set(SESSION_COOKIE, cookieValue, sessionCookieOptions(maxAge, isSecureRequest(request)));
 
     // The profile document is created by the browser through the client SDK,
     // where the rules prove ownership from the signed-in uid. This route only

@@ -164,14 +164,45 @@ export async function requireSessionUser(): Promise<SessionUser | null> {
   return getSessionUser();
 }
 
-export function sessionCookieOptions(maxAge: number) {
+/**
+ * Cookie attributes for the session cookie.
+ *
+ * `secure` MUST be derived from the request protocol, not from NODE_ENV. The
+ * production server is frequently reached over plain HTTP during local testing
+ * or on a LAN address (`http://192.168.x.x:3114`), and a browser silently
+ * refuses to store a `Secure` cookie on any origin that is not HTTPS — with one
+ * narrow exception, `localhost`. Get this wrong and the cookie is dropped with
+ * no error anywhere: Firebase sign-in still succeeds client-side, but the proxy
+ * sees no session on the next navigation and bounces /dashboard back to /login,
+ * so the app appears to sign in and then endlessly reload the login page.
+ */
+export function sessionCookieOptions(maxAge: number, secure: boolean) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax" as const,
     path: "/",
     maxAge,
   };
+}
+
+/**
+ * Whether the request that produced this response was HTTPS.
+ *
+ * `x-forwarded-proto` is set by the proxy/load balancer in front of the app and
+ * is the only trustworthy signal in a deployed environment, since the app itself
+ * may sit behind TLS termination and only ever see HTTP internally.
+ */
+export function isSecureRequest(request: Request): boolean {
+  const forwarded = request.headers.get("x-forwarded-proto");
+  if (forwarded) return forwarded.split(",")[0]?.trim().toLowerCase() === "https";
+
+  // Fall back to the URL Next reconstructed for the request.
+  try {
+    return new URL(request.url).protocol === "https:";
+  } catch {
+    return process.env.NODE_ENV === "production";
+  }
 }
 
 /** Exposed so the session route can choose an age without duplicating the value. */
