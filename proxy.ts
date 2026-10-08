@@ -80,7 +80,17 @@ function hasUsableSession(request: NextRequest): boolean {
     if (aud !== expectedProject) return false;
   }
 
-  if (claims.iss && !claims.iss.startsWith("https://securetoken.google.com/")) return false;
+  // ID tokens use https://securetoken.google.com/<project>, while Admin-minted
+  // session cookies use https://session.firebase.google.com/<project>. Accept
+  // both — otherwise enabling the Admin SDK would set a valid 5-day cookie
+  // that the proxy immediately rejects, bouncing every sign-in back to /login
+  // with "the browser could not keep the session".
+  if (
+    claims.iss &&
+    !claims.iss.startsWith("https://securetoken.google.com/") &&
+    !claims.iss.startsWith("https://session.firebase.google.com/")
+  )
+    return false;
 
   return true;
 }

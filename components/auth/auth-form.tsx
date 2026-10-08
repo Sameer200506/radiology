@@ -110,43 +110,81 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [displayName, setDisplayName] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"google" | "email" | null>(null);
+  const [completing, setCompleting] = React.useState(false);
 
   const redirectTo = safeRedirectTarget(searchParams.get("next"));
   const configured = isFirebaseConfigured();
 
   /**
-   * Navigate once Firebase reports a signed-in user.
+   * Navigate once Firebase reports a signed-in user — but only after the
+   * server confirms the session cookie survived the round trip.
    *
-   * Clearing `busy` here matters: sign-in succeeds, this effect runs, and the
-   * navigation may take a moment — or bounce back here if the session cookie did
-   * not survive. Leaving the button spinning through all of that told the user
-   * nothing had happened while it was in fact mid-redirect.
+   * Previously this effect called `router.replace` the moment `user` appeared.
+   * The session POST (`onIdTokenChanged` → /api/auth/session) is asynchronous,
+   * so the navigation usually won the race: the proxy saw no cookie on
+   * /dashboard and bounced straight back to /login, where the second effect
+   * run showed "the browser could not keep the session". In dev, StrictMode's
+   * double effect produced the same error without any navigation at all.
    *
-   * The attempt counter is a backstop against a redirect loop. The proxy sends
-   * an authenticated-but-cookieless visitor from /dashboard back to
-   * /login?next=/dashboard, which would re-trigger this effect indefinitely.
-   * Rather than spinning forever, say what is actually wrong.
+   * Now the effect re-POSTs the fresh ID token and GETs the session back
+   * before navigating. A failed confirmation keeps the user here with the
+   * actionable cookies/HTTP message instead of a redirect loop.
    */
-  const attemptsRef = React.useRef(0);
+  const navigatedRef = React.useRef(false);
 
   React.useEffect(() => {
     if (!ready || !user) {
-      attemptsRef.current = 0;
+      navigatedRef.current = false;
       return;
     }
+    if (navigatedRef.current) return;
 
-    setBusy(null);
+    let cancelled = false;
 
-    if (attemptsRef.current > 0) {
-      setError(
-        "You are signed in, but the browser could not keep the session. This usually means cookies are blocked for this site, or it is being opened over plain HTTP on a network address. Allow cookies for this site and try again.",
-      );
-      return;
+    async function confirmAndRedirect() {
+      setBusy(null);
+      setCompleting(true);
+      setError(null);
+
+      const { ensureSessionCookie } = await import("@/lib/auth/client");
+
+      let ok = false;
+      for (let attempt = 0; attempt < 2 && !cancelled; attempt += 1) {
+        try {
+          ok = await ensureSessionCookie();
+        } catch {
+          ok = false;
+        }
+        if (ok || cancelled) break;
+        // The Set-Cookie may still be settling, or the first token fetch raced
+        // the POST. One short retry covers the transient case; a persistent
+        // failure is a real cookie problem and should be reported, not looped.
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+        }
+      }
+
+      if (cancelled) return;
+      setCompleting(false);
+
+      if (!ok) {
+        setError(
+          "You are signed in, but the browser could not keep the session. This usually means cookies are blocked for this site, or it is being opened over plain HTTP on a network address. Allow cookies for this site and try again.",
+        );
+        return;
+      }
+
+      navigatedRef.current = true;
+      router.replace(redirectTo);
+      router.refresh();
     }
 
-    attemptsRef.current += 1;
-    router.replace(redirectTo);
-  }, [ready, user, router, redirectTo, setBusy]);
+    void confirmAndRedirect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, user, router, redirectTo]);
 
   const runGoogle = async () => {
     setError(null);
@@ -244,21 +282,33 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     );
   }
 
+  const formDisabled = busy !== null || completing;
+
   return (
     <form onSubmit={runEmail} className="space-y-5" noValidate>
       <FormError message={error} />
+      {completing && !error ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 rounded-xl border border-line bg-surface/70 px-3.5 py-3 text-sm text-muted"
+        >
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          Completing sign-in…
+        </p>
+      ) : null}
 
       <button
         type="button"
         onClick={runGoogle}
-        disabled={busy !== null}
+        disabled={formDisabled}
         className={cn(
           "flex h-11 w-full items-center justify-center gap-3 rounded-full border border-line bg-surface/70 text-sm font-medium text-ink transition-colors",
           "hover:border-brand/40 hover:bg-brand/5 disabled:cursor-not-allowed disabled:opacity-60",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         )}
       >
-        {busy === "google" ? (
+        {busy === "google" || completing ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         ) : (
           <GoogleMark />
@@ -343,7 +393,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         ) : null}
       </div>
 
-      <Button type="submit" block size="lg" loading={busy === "email"} disabled={busy !== null}>
+      <Button
+        type="submit"
+        block
+        size="lg"
+        loading={busy === "email" || completing}
+        disabled={formDisabled}
+      >
         {mode === "login" ? "Sign in" : "Create account"}
       </Button>
     </form>

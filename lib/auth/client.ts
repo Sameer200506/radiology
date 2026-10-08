@@ -77,8 +77,6 @@ function mapAuthError(error: unknown): string {
       return "Your browser blocked the sign-in popup. Allow popups for this site and try again.";
     case "auth/account-exists-with-different-credential":
       return "An account already exists with that email using a different sign-in method.";
-    case "auth/too-many-requests":
-      return "Too many attempts. Please wait a minute and try again.";
     case "auth/operation-not-allowed":
       return "That sign-in method is not enabled for this project.";
     default:
@@ -149,23 +147,78 @@ async function provisionProfile(user: User): Promise<void> {
   }
 }
 
-/** Pushes the current Firebase ID token into the httpOnly session cookie. */
-async function syncSessionCookie(user: User | null): Promise<void> {
+/**
+ * Pushes the current Firebase ID token into the httpOnly session cookie.
+ *
+ * Returns true only when the server confirmed the session (HTTP 2xx).
+ * `credentials: "same-origin"` is set explicitly so the browser stores the
+ * Set-Cookie on every fetch implementation — the default varies, and without
+ * it the POST can succeed server-side while the cookie is silently dropped,
+ * which previously surfaced as "signed in, but the browser could not keep
+ * the session" on the very next navigation.
+ */
+async function syncSessionCookie(user: User | null): Promise<boolean> {
   try {
     if (!user) {
-      await fetch("/api/auth/session", { method: "DELETE" });
-      return;
+      await fetch("/api/auth/session", {
+        method: "DELETE",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      return true;
     }
     const idToken = await user.getIdToken();
-    await fetch("/api/auth/session", {
+    const response = await fetch("/api/auth/session", {
       method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idToken }),
     });
+    return response.ok;
   } catch {
     // A failed sync degrades the session, it does not break the UI. The next
     // onIdTokenChanged (one hour, or on any re-auth) retries.
+    return false;
   }
+}
+
+/**
+ * Asks the server whether the session cookie survived the round trip.
+ *
+ * A POST that returns 200 proves the token verified, but NOT that the
+ * browser kept the Set-Cookie (Secure-on-plain-HTTP, blocked cookies). This
+ * GET proves the cookie is actually attached to subsequent requests, so the
+ * login form can tell "token rejected" apart from "cookie dropped".
+ */
+export async function checkServerSession(): Promise<boolean> {
+  try {
+    const response = await fetch("/api/auth/session", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+    const payload = (await response.json()) as { authenticated?: boolean };
+    return payload.authenticated === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Re-POSTs the current Firebase ID token, then confirms the cookie stuck.
+ * Used by the login form before navigating, so /dashboard is only requested
+ * once the proxy will actually see a session — navigating earlier bounced
+ * back to /login and produced the "could not keep the session" error.
+ */
+export async function ensureSessionCookie(): Promise<boolean> {
+  const { auth } = getFirebase();
+  const current = auth?.currentUser;
+  if (!current) return false;
+  const posted = await syncSessionCookie(current);
+  if (!posted) return false;
+  return checkServerSession();
 }
 
 export function isAuthAvailable(): boolean {

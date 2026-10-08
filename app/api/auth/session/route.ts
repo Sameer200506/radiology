@@ -17,6 +17,7 @@ import { getAdminAuth } from "@/lib/firebase/admin";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
+  getSessionUser,
   idTokenMaxAgeSeconds,
   isSecureRequest,
   sessionCookieOptions,
@@ -89,6 +90,40 @@ export async function POST(request: Request) {
           photoURL: user.photoURL,
         },
         expiresInSeconds: maxAge,
+      },
+      200,
+      NO_STORE,
+    );
+  } catch (error) {
+    return jsonFromError(error);
+  }
+}
+
+/**
+ * GET /api/auth/session
+ *
+ * Returns whether the request carried a verifiable session cookie. The login
+ * form calls this right after POSTing the ID token: POST 200 proves the
+ * token verified, but only GET 200 with `authenticated: true` proves the
+ * browser actually kept the Set-Cookie (not dropped as Secure-on-plain-HTTP
+ * or blocked). That distinction is what lets the UI show the actionable
+ * "allow cookies" message instead of looping back to /login.
+ */
+export async function GET() {
+  try {
+    const user = await getSessionUser();
+    if (!user) {
+      return jsonOk({ authenticated: false }, 200, NO_STORE);
+    }
+    return jsonOk(
+      {
+        authenticated: true,
+        user: {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        },
       },
       200,
       NO_STORE,
