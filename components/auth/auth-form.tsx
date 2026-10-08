@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/components/auth/auth-provider";
-import { isFirebaseConfigured } from "@/lib/firebase/client";
+import { isFirebaseConfigured, missingFirebaseEnvKeys } from "@/lib/firebase/client";
 import { safeRedirectTarget } from "@/lib/security/access";
 
 export function AuthCard({
@@ -186,14 +186,53 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   };
 
   if (!configured) {
+    const missing = missingFirebaseEnvKeys();
+    const isHosted = typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(
+      window.location.hostname,
+    );
+
     return (
       <div className="space-y-5">
         <div className="rounded-2xl border border-caution/30 bg-caution-soft/40 p-4">
           <p className="text-sm font-medium text-ink">Authentication is not configured yet</p>
-          <p className="mt-1.5 text-sm leading-relaxed text-muted">
-            The Firebase client environment variables are missing. Follow the setup guide in the
-            project README to add them, then restart the dev server.
+
+          {missing.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-subtle">
+                Missing environment variables
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {missing.map((key) => (
+                  <li key={key} className="font-mono text-xs text-ink">
+                    {key}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <p className="mt-3 text-sm leading-relaxed text-muted">
+            Follow the setup guide in the project README to add them.
           </p>
+
+          {/*
+            NEXT_PUBLIC_* values are inlined when the app is BUILT, not when it
+            runs. On a host like Vercel, saving the variable is not enough: the
+            deployment still holds the old bundle until it is rebuilt. Saying so
+            here saves a long hunt, because the variable list looks correct in
+            the dashboard while the deployed page still reports it missing.
+          */}
+          {isHosted ? (
+            <p className="mt-3 rounded-xl border border-caution/30 bg-caution-soft/30 p-3 text-xs leading-relaxed text-ink">
+              <strong className="font-semibold">These values are baked in at build time.</strong> If
+              you have just added or changed them, you must redeploy for the new bundle to pick
+              them up — saving the variable alone changes nothing.
+            </p>
+          ) : (
+            <p className="mt-1.5 text-sm leading-relaxed text-muted">
+              Then restart the dev server.
+            </p>
+          )}
         </div>
         <Button asChild variant="secondary" block>
           <Link href="/">
