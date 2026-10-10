@@ -218,7 +218,14 @@ export async function ensureSessionCookie(): Promise<boolean> {
   if (!current) return false;
   const posted = await syncSessionCookie(current);
   if (!posted) return false;
-  return checkServerSession();
+
+  // The POST response is the authoritative cookie exchange. A follow-up GET
+  // unnecessarily made sign-in depend on a second token-verification request
+  // (and on a separate serverless invocation). On Vercel that second request
+  // can fail transiently even though the browser already received the cookie,
+  // leaving users stuck on the auth page. The protected destination still
+  // verifies the cookie, and the proxy rejects an unusable token before render.
+  return true;
 }
 
 export function isAuthAvailable(): boolean {

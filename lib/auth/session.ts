@@ -194,6 +194,28 @@ export function sessionCookieOptions(maxAge: number, secure: boolean) {
  * may sit behind TLS termination and only ever see HTTP internally.
  */
 export function isSecureRequest(request: Request): boolean {
+  // A development server is often opened from another device as
+  // `http://192.168.x.x:3000`. Some local reverse proxies add
+  // `x-forwarded-proto: https` even though the browser-to-app connection is
+  // still plain HTTP. Trusting that header in this case makes the browser
+  // silently reject the Secure cookie, which looks like a successful Firebase
+  // sign-in followed by an immediate session failure.
+  try {
+    const url = new URL(request.url);
+    const hostname = url.hostname.toLowerCase();
+    const isLocalNetworkHost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      /^10\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+
+    if (isLocalNetworkHost && url.protocol === "http:") return false;
+  } catch {
+    // Continue with the forwarded-protocol fallback below.
+  }
+
   const forwarded = request.headers.get("x-forwarded-proto");
   if (forwarded) return forwarded.split(",")[0]?.trim().toLowerCase() === "https";
 

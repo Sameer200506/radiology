@@ -129,7 +129,12 @@ export async function GET() {
       NO_STORE,
     );
   } catch (error) {
-    return jsonFromError(error);
+    // Session probing is diagnostic only. A transient verification/configuration
+    // failure must not turn the endpoint into a blank 500 response; the login
+    // flow is based on the POST cookie exchange and protected routes still
+    // perform the real authentication check.
+    console.error("[session] probe failed:", error instanceof Error ? error.message : "unknown error");
+    return jsonOk({ authenticated: false }, 200, NO_STORE);
   }
 }
 
