@@ -14,10 +14,17 @@ import {
 } from "@/components/assessment/wizard-store";
 import { useAuth } from "@/components/auth/auth-provider";
 import { api, errorMessage, isRetryable } from "@/lib/api/client";
-import { saveAnalysis as persistAnalysis, updateAssessment as patchAssessment, writeAuditLog } from "@/lib/data";
+import {
+  saveAnalysis as persistAnalysis,
+  updateAssessment as patchAssessment,
+  updateUpload,
+  listUploads,
+  writeAuditLog,
+} from "@/lib/data";
 import { readFileAsDataUrl } from "@/lib/medical/extract-text-client";
 import type { AssessmentResult, AuditMetadata, TriageResult } from "@/types/assessment";
 import type { ImagingAnalysis } from "@/types/medical";
+import { commitAnalysisUpload, hasSuccessfulImaging } from "./analysis-uploads";
 
 /**
  * Step 5 — the analysis experience.
@@ -35,12 +42,13 @@ import type { ImagingAnalysis } from "@/types/medical";
  * actually does.
  */
 export function StepAnalysis() {
-  const { state, dispatch, save } = useWizard();
+  const { state, dispatch } = useWizard();
   const { user } = useAuth();
   const uid = user?.uid ?? null;
 
   const [running, setRunning] = React.useState(false);
   const startedRef = React.useRef(false);
+  const runningRef = React.useRef(false);
 
   const setStage = React.useCallback(
     (id: string, status: AnalysisStageState["status"]) => {
@@ -50,8 +58,11 @@ export function StepAnalysis() {
   );
 
   const runAnalysis = React.useCallback(async () => {
-    if (running || !uid || !state.assessmentId) return;
+    if (runningRef.current || state.result || !uid || !state.assessmentId) return;
+    runningRef.current = true;
     setRunning(true);
+    dispatch({ type: "setBusy", payload: true });
+    dispatch({ type: "setStages", payload: state.stages.map((stage) => ({ ...stage, status: "idle" })) });
     dispatch({ type: "clearError" });
 
     const audit: {
@@ -146,8 +157,15 @@ export function StepAnalysis() {
       }
 
       /* ---------------------------------------------------- 4. Documents --- */
+      setStage("documents", "running");
+      // Synthetic case documents have no upload record. Never create partial
+      // metadata records for them (including in a demo with real uploads).
+      const storedIds = new Set((await listUploads(uid, assessmentId)).map((upload) => upload.id));
+      const commitUpload = (id: string, patch: Partial<typeof state.uploads[number]>) =>
+        commitAnalysisUpload(id, patch, storedIds,
+          (uploadId, metadata) => updateUpload(uid, assessmentId, uploadId, metadata), patchUpload);
       const pendingDocs = currentUploads.filter(
-        (upload) => upload.status !== "analyzed" && Boolean(upload.extractedText),
+        (upload) => !upload.analysis && Boolean(upload.extractedText),
       );
 
       if (currentUploads.length === 0 || pendingDocs.length === 0) {
@@ -155,6 +173,7 @@ export function StepAnalysis() {
       } else {
         setStage("documents", "running");
         audit.documents = [];
+        let documentsFailed = false;
         for (const document of pendingDocs) {
           try {
             const response = await api.post<{
@@ -166,13 +185,15 @@ export function StepAnalysis() {
               mimeType: document.mimeType,
               sizeBytes: document.sizeBytes,
             });
-            patchUpload(document.id, { analysis: response.analysis, status: "analyzed" });
+            await commitUpload(document.id, { analysis: response.analysis, status: "analyzed" });
+            patchUpload(document.id, { error: null });
             audit.documents.push(response.audit);
           } catch {
+            documentsFailed = true;
             patchUpload(document.id, { error: "This document could not be analysed." });
           }
         }
-        setStage("documents", "done");
+        setStage("documents", documentsFailed ? "failed" : "done");
       }
 
       /* ------------------------------------------------------ 5. Imaging --- */
@@ -182,7 +203,9 @@ export function StepAnalysis() {
       } else {
         setStage("imaging", "running");
         audit.imaging = [];
+        let imagingFailed = false;
         for (const image of images) {
+          if (hasSuccessfulImaging(image)) continue;
           try {
             const dataUrl = image.file
               ? await readFileAsDataUrl(image.file).catch(() => null)
@@ -199,8 +222,9 @@ export function StepAnalysis() {
                 unavailableReason:
                   "This image was uploaded in an earlier session, so its contents are no longer available for analysis. Re-upload it to have it described.",
               };
-              patchUpload(image.id, { imaging: unavailable });
-              continue;
+               await commitUpload(image.id, { imaging: unavailable, status: image.analysis ? "analyzed" : "uploaded" });
+               imagingFailed = true;
+               continue;
             }
 
             const response = await api.post<{
@@ -211,17 +235,20 @@ export function StepAnalysis() {
               fileName: image.fileName,
             });
 
-            patchUpload(image.id, {
+            await commitUpload(image.id, {
               imaging: response.imaging,
               status: response.imaging.mode === "unavailable" ? "uploaded" : "analyzed",
             });
+            patchUpload(image.id, { error: null });
+            if (response.imaging.mode === "unavailable") imagingFailed = true;
 
             if (response.audit) audit.imaging.push(response.audit);
           } catch {
+            imagingFailed = true;
             patchUpload(image.id, { error: "This image could not be analysed." });
           }
         }
-        setStage("imaging", "done");
+        setStage("imaging", imagingFailed ? "failed" : "done");
       }
 
       /* -------------------------------------------------- 6. Assessment --- */
@@ -263,6 +290,7 @@ export function StepAnalysis() {
         stage: "complete",
         urgency: response.result.urgency.level,
         symptomSummary: buildSymptomSummary(caseData.symptoms, caseData.freeText),
+        caseData,
       });
 
       void writeAuditLog({
@@ -284,6 +312,7 @@ export function StepAnalysis() {
       dispatch({
         type: "setResult",
         payload: {
+          caseData,
           result: response.result,
           triage: response.triage,
           assessmentAudit: response.audit,
@@ -294,33 +323,28 @@ export function StepAnalysis() {
       });
 
       setStage("assessment", "done");
-      await save();
     } catch (error) {
       dispatch({
         type: "setError",
         payload: { message: errorMessage(error, "The analysis could not be completed."), retryable: isRetryable(error) },
       });
-      dispatch({
-        type: "setStages",
-        payload: state.stages.map((stage) =>
-          stage.status === "running" ? { ...stage, status: "failed" as const } : stage,
-        ),
-      });
+      dispatch({ type: "markRunningStagesFailed" });
     } finally {
+      runningRef.current = false;
+      dispatch({ type: "setBusy", payload: false });
       setRunning(false);
     }
-  }, [uid, dispatch, running, save, setStage, state]);
+  }, [uid, dispatch, setStage, state]);
 
   React.useEffect(() => {
-    if (startedRef.current) return;
+    if (startedRef.current || !uid || !state.assessmentId || state.result) return;
     startedRef.current = true;
     void runAnalysis();
     // runAnalysis depends on `state`, which changes throughout the run.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [uid, state.assessmentId, state.result, runAnalysis]);
 
   const allSettled = state.stages.every(
-    (stage) => stage.status === "done" || stage.status === "skipped" || stage.status === "failed",
+    (stage) => stage.status === "done" || stage.status === "skipped",
   );
 
   return (
@@ -350,7 +374,7 @@ export function StepAnalysis() {
             {state.error}
           </p>
           {state.retryable ? (
-            <Button onClick={() => void runAnalysis()} size="sm">
+            <Button onClick={() => void runAnalysis()} size="sm" disabled={running}>
               <RefreshCw className="size-3.5" aria-hidden="true" />
               Try again
             </Button>
@@ -389,8 +413,7 @@ export function StepAnalysis() {
             exit={{ opacity: 0 }}
             className="text-center text-xs text-subtle"
           >
-            This usually takes 10–40 seconds. You can leave this page open or come back from the
-            dashboard later.
+            Keep this page open while analysis runs. Closing or reloading it can interrupt the analysis.
           </motion.p>
         ) : null}
       </AnimatePresence>

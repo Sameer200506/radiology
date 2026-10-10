@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { MedicalDisclaimer } from "@/components/medical/disclaimer";
 import { EmergencyBanner } from "@/components/medical/emergency-banner";
 import { useWizard, type WizardStep } from "@/components/assessment/wizard-store";
-import type { Sex } from "@/types/medical";
+import type { MedicalCase, Sex } from "@/types/medical";
 
 const SEX_OPTIONS: Array<{ value: Sex; label: string }> = [
   { value: "female", label: "Female" },
@@ -55,10 +55,17 @@ export function StepInformation() {
         ? parsedAge
         : undefined;
 
-    dispatch({ type: "setDemographics", payload: { ...(validAge !== undefined ? { age: validAge } : {}), ...(sex ? { sex } : {}) } });
+    const demographics = {
+      ...state.caseData.demographics,
+      ...(validAge !== undefined ? { age: validAge } : {}),
+      ...(sex ? { sex } : {}),
+    };
+    const caseData: MedicalCase = { ...state.caseData, demographics };
 
-    await createAssessment();
-    await runSafetyCheck();
+    dispatch({ type: "setDemographics", payload: demographics });
+
+    await createAssessment({ caseData });
+    await runSafetyCheck(caseData);
     dispatch({ type: "setStep", payload: 1 as WizardStep });
   };
 
@@ -149,7 +156,7 @@ export function StepInformation() {
 
 /** Step 2 — symptoms: pick from the list, or describe in your own words. */
 export function StepSymptoms() {
-  const { state, dispatch, runSafetyCheck } = useWizard();
+  const { state, dispatch, runSafetyCheck, save } = useWizard();
   const [selected, setSelected] = React.useState<string[]>(
     state.caseData.symptoms.map((s) => s.name).filter(Boolean),
   );
@@ -186,10 +193,13 @@ export function StepSymptoms() {
       ...(index === 0 && severity.trim() ? { severity: severity.trim() } : {}),
     }));
 
+    const caseData: MedicalCase = { ...state.caseData, symptoms, freeText: freeText.trim() };
+
     dispatch({ type: "setCaseField", payload: { field: "symptoms", value: symptoms } });
     dispatch({ type: "setCaseField", payload: { field: "freeText", value: freeText.trim() } });
 
-    await runSafetyCheck();
+    await runSafetyCheck(caseData);
+    await save(caseData, 1);
     dispatch({ type: "setStep", payload: 2 as WizardStep });
   };
 

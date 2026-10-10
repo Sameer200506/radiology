@@ -151,7 +151,7 @@ function QuestionField({
 }
 
 export function StepQuestions() {
-  const { state, dispatch, runSafetyCheck } = useWizard();
+  const { state, dispatch, runSafetyCheck, save } = useWizard();
   const [loading, setLoading] = React.useState(
     state.questions.length === 0 && state.questionsSource === "pending",
   );
@@ -197,7 +197,8 @@ export function StepQuestions() {
     dispatch({ type: "setAnswer", payload: { id: question.id, answer: value } });
   };
 
-  const goNext = () => {
+  const goNext = async () => {
+    await save(state.caseData, 2);
     dispatch({ type: "setStep", payload: 3 as WizardStep });
   };
 

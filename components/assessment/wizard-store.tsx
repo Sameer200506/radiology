@@ -5,6 +5,7 @@ import * as React from "react";
 import { api, errorMessage } from "@/lib/api/client";
 import {
   createAssessment as createAssessmentRecord,
+  getAssessment,
   listUploads as readUploads,
   updateAssessment as patchAssessment,
   writeAuditLog,
@@ -248,6 +249,14 @@ function reducer(state: WizardState, action: Action): WizardState {
     case "setStages":
       return { ...state, stages: p as AnalysisStageState[] };
 
+    case "markRunningStagesFailed":
+      return {
+        ...state,
+        stages: state.stages.map((stage) =>
+          stage.status === "running" ? { ...stage, status: "failed" as const } : stage,
+        ),
+      };
+
     case "setResult":
       return { ...state, ...(p as Partial<WizardState>) };
 
@@ -294,9 +303,9 @@ const WizardContext = React.createContext<{
   state: WizardState;
   dispatch: React.Dispatch<Action>;
   /** Persists the case snapshot + answers to the server. */
-  save: () => Promise<void>;
-  createAssessment: (options?: { demo?: boolean; scenarioId?: string }) => Promise<string>;
-  runSafetyCheck: () => Promise<void>;
+  save: (caseData?: MedicalCase, step?: WizardStep) => Promise<void>;
+  createAssessment: (options?: { demo?: boolean; scenarioId?: string; caseData?: MedicalCase }) => Promise<string>;
+  runSafetyCheck: (caseData?: MedicalCase) => Promise<void>;
   refreshUploads: () => Promise<void>;
 } | null>(null);
 
@@ -319,26 +328,30 @@ export function WizardProvider({
   });
 
   const uid = useUid();
+  const creatingRef = React.useRef<Promise<string> | null>(null);
 
-  const save = React.useCallback(async () => {
+  const save = React.useCallback(async (caseData = state.caseData, step = state.step) => {
     const id = state.assessmentId;
     if (!id || !uid) return;
 
     try {
       await patchAssessment(uid, id, {
-        caseData: state.caseData,
-        stage: STEP_LABELS[state.step],
+        caseData,
+        stage: STEP_LABELS[step],
       });
     } catch (error) {
-      // A failed autosave must not block the wizard. The final analysis call
-      // carries the full case anyway.
-      console.warn("[wizard] autosave failed:", errorMessage(error));
+      const message = errorMessage(error);
+      dispatch({ type: "setError", payload: { message: `Your draft could not be saved: ${message}`, retryable: true } });
+      throw error;
     }
   }, [uid, state.assessmentId, state.caseData, state.step]);
 
   const createAssessment = React.useCallback(
-    async (options: { demo?: boolean; scenarioId?: string } = {}) => {
+    async (options: { demo?: boolean; scenarioId?: string; caseData?: MedicalCase } = {}) => {
       if (state.assessmentId) return state.assessmentId;
+      if (creatingRef.current) return creatingRef.current;
+
+      const operation = (async () => {
 
       if (options.demo) {
         const scenarioId = options.scenarioId ?? "respiratory";
@@ -359,7 +372,7 @@ export function WizardProvider({
 
       const isDemo = options.demo === true;
       const scenarioId = options.scenarioId ?? "respiratory";
-      const caseData = isDemo ? buildDemoCase(scenarioId) : buildEmptyCase();
+      const caseData = options.caseData ?? (isDemo ? buildDemoCase(scenarioId) : buildEmptyCase());
 
       // Straight to Firestore through the client SDK. The rules prove ownership
       // from the signed-in uid; there is no server in this path.
@@ -390,6 +403,9 @@ export function WizardProvider({
       });
 
       return created.id;
+      })();
+      creatingRef.current = operation;
+      try { return await operation; } finally { creatingRef.current = null; }
     },
     // `uid` guards against creating an assessment before auth resolves; the
     // repository reads the current user itself.
@@ -397,13 +413,38 @@ export function WizardProvider({
     [state.assessmentId, uid],
   );
 
-  const runSafetyCheck = React.useCallback(async () => {
+  React.useEffect(() => {
+    if (!initialAssessmentId || !uid) return;
+    let cancelled = false;
+    void getAssessment(uid, initialAssessmentId).then((record) => {
+      if (cancelled) return;
+      if (!record) {
+        dispatch({ type: "setError", payload: { message: "This draft could not be found.", retryable: false } });
+        return;
+      }
+      dispatch({ type: "hydrate", payload: {
+        assessmentId: record.id,
+        caseData: record.caseData,
+        isDemo: record.isDemo,
+        // Uploaded File objects cannot survive a reload. Resume at documents;
+        // the user can review the snapshot and attach files again if needed.
+        step: 3,
+        maxStepReached: 3,
+        uploads: seedUploadsFromCase(record.caseData),
+      } });
+    }).catch((error) => {
+      if (!cancelled) dispatch({ type: "setError", payload: { message: `Draft loading failed: ${errorMessage(error)}`, retryable: true } });
+    });
+    return () => { cancelled = true; };
+  }, [initialAssessmentId, uid]);
+
+  const runSafetyCheck = React.useCallback(async (caseData = state.caseData) => {
     try {
       const response = await api.put<{ triage: TriageResult }>("/api/ai/intake", {
-        symptoms: state.caseData.symptoms.map((s) => s.name),
-        answers: state.caseData.answers,
-        freeText: state.caseData.freeText,
-        age: state.caseData.demographics.age,
+        symptoms: caseData.symptoms.map((s) => s.name),
+        answers: caseData.answers,
+        freeText: caseData.freeText,
+        age: caseData.demographics.age,
       });
       dispatch({ type: "setTriage", payload: response.triage });
     } catch (error) {

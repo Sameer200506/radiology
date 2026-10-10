@@ -46,7 +46,7 @@ import { isVisionAnalysisAvailableHint } from "@/components/medical/vision-note"
  * for a vision model to describe.
  */
 export function StepDocuments() {
-  const { state, dispatch } = useWizard();
+  const { state, dispatch, save } = useWizard();
   const { user } = useAuth();
   const uid = user?.uid ?? null;
 
@@ -435,7 +435,10 @@ export function StepDocuments() {
 
       <WizardNav
         onBack={() => dispatch({ type: "setStep", payload: 2 as WizardStep })}
-        onNext={() => dispatch({ type: "setStep", payload: 4 as WizardStep })}
+        onNext={async () => {
+          await save(state.caseData, 3);
+          dispatch({ type: "setStep", payload: 4 as WizardStep });
+        }}
         nextLabel="Analyse my information"
         hint={
           allUploads.length === 0

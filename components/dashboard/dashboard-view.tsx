@@ -374,7 +374,7 @@ export function AssessmentCard({ item }: { item: AssessmentSummary }) {
   const presentation = item.urgency ? urgencyPresentation(item.urgency) : null;
 
   return (
-    <Link href={`/dashboard/assessments/${item.id}`} className="group block">
+    <Link href={item.status === "draft" || item.status === "in_progress" ? `/assessment/new?draft=${encodeURIComponent(item.id)}` : `/dashboard/assessments/${item.id}`} className="group block">
       <Card variant="glass" hover="lift" padding="sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
