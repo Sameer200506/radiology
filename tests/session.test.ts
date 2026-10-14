@@ -19,4 +19,10 @@ describe("session cookie protocol detection", () => {
 
     expect(isSecureRequest(request)).toBe(true);
   });
+
+  it("safely returns null when no Firebase Admin credentials are configured", async () => {
+    const { getAdminAuth } = await import("@/lib/firebase/admin");
+    expect(getAdminAuth()).toBeNull();
+  });
 });
+

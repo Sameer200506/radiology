@@ -20,10 +20,10 @@
 
 import "server-only";
 
-import { initializeApp, getApps, cert, applicationDefault, type App } from "firebase-admin/app";
-import { getAuth, type Auth } from "firebase-admin/auth";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { getStorage, type Storage as AdminStorage } from "firebase-admin/storage";
+import type { App } from "firebase-admin/app";
+import type { Auth } from "firebase-admin/auth";
+import type { Firestore } from "firebase-admin/firestore";
+import type { Storage as AdminStorage } from "firebase-admin/storage";
 
 export interface AdminAvailability {
   firestore: boolean;
@@ -107,11 +107,6 @@ function hasUsableAdminCredential(): boolean {
 function getAdminApp(): App | null {
   if (cachedApp) return cachedApp;
 
-  if (getApps().length > 0) {
-    cachedApp = getApps()[0] as App;
-    return cachedApp;
-  }
-
   if (!hasUsableAdminCredential()) {
     // Report once, then stay quiet.
     if (!credentialChecked) {
@@ -124,12 +119,21 @@ function getAdminApp(): App | null {
   }
   credentialChecked = false;
 
-  const serviceAccount = readServiceAccount();
-
   try {
+    // ponytail: Dynamic require inside hasUsableAdminCredential guard ensures
+    // that deployments without server-side service accounts never load or fail on
+    // firebase-admin at module initialization time.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const adminApp = require("firebase-admin/app");
+    if (adminApp.getApps().length > 0) {
+      cachedApp = adminApp.getApps()[0] as App;
+      return cachedApp;
+    }
+
+    const serviceAccount = readServiceAccount();
     if (serviceAccount) {
-      cachedApp = initializeApp({
-        credential: cert({
+      cachedApp = adminApp.initializeApp({
+        credential: adminApp.cert({
           projectId: serviceAccount.project_id,
           clientEmail: serviceAccount.client_email,
           privateKey: serviceAccount.private_key,
@@ -142,8 +146,8 @@ function getAdminApp(): App | null {
 
     // Only reached when GOOGLE_APPLICATION_CREDENTIALS points at a valid file,
     // so `applicationDefault()` here is safe to call synchronously.
-    cachedApp = initializeApp({
-      credential: applicationDefault(),
+    cachedApp = adminApp.initializeApp({
+      credential: adminApp.applicationDefault(),
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
       storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     });
@@ -169,17 +173,26 @@ export function adminInitError(): string | null {
 
 export function getAdminAuth(): Auth | null {
   const app = getAdminApp();
-  return app ? getAuth(app) : null;
+  if (!app) return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getAuth } = require("firebase-admin/auth");
+  return getAuth(app);
 }
 
 export function getAdminDb(): Firestore | null {
   const app = getAdminApp();
-  return app ? getFirestore(app) : null;
+  if (!app) return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getFirestore } = require("firebase-admin/firestore");
+  return getFirestore(app);
 }
 
 export function getAdminStorage(): AdminStorage | null {
   const app = getAdminApp();
-  return app ? getStorage(app) : null;
+  if (!app) return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getStorage } = require("firebase-admin/storage");
+  return getStorage(app);
 }
 
 /** True when the Admin SDK is usable for privileged operations. */
