@@ -64,6 +64,9 @@ async function verifyTokenViaRest(idToken: string): Promise<SessionUser | null> 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idToken }),
       cache: "no-store",
+      // A stalled connection must become a quick 401, not an eternal await
+      // inside a route handler.
+      signal: AbortSignal.timeout(10_000),
     },
   );
 

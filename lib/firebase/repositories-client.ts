@@ -97,6 +97,51 @@ function assertSafeId(id: string, label: string): string {
   return id;
 }
 
+/* ------------------------------------------------------------------ *
+ * Network guard — every client-side Firestore call gets a deadline
+ * ------------------------------------------------------------------ */
+
+/** Single-document reads. */
+const READ_TIMEOUT_MS = 20_000;
+/** Writes (setDoc / batch.commit). */
+const WRITE_TIMEOUT_MS = 25_000;
+/** Collection queries. */
+const LIST_TIMEOUT_MS = 30_000;
+/** Raw file bytes to Cloud Storage — generous, real uploads can be slow. */
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+/**
+ * Hard deadline for browser Firestore/Storage operations.
+ *
+ * The Firebase JS SDK never rejects a request that cannot reach the backend —
+ * it silently queues and retries forever. On a flaky or half-broken connection
+ * that turns the wizard's "Saving…" state into an eternal spinner with no way
+ * to retry. Every awaited network call below moves through this guard so the
+ * caller receives a real, retryable error within seconds of the deadline.
+ *
+ * The underlying operation is not cancelled: if it completes after the timer,
+ * a retry may find the record already created. That record stays visible on
+ * the dashboard, which is far better than an app that cannot report failure.
+ */
+async function withNetworkTimeout<T>(
+  operation: Promise<T>,
+  action: string,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${action} is taking too long. Check your connection and try again.`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /** Current signed-in uid. Throws rather than writing under an anonymous path. */
 function requireUid(): string {
   const { auth } = requireFirebase();
@@ -134,31 +179,43 @@ export async function ensureUserProfile(input: {
   assertSafeId(input.uid, "user id");
 
   const ref = doc(db, COLLECTIONS.users, input.uid);
-  const existing = await getDoc(ref);
+  const existing = await withNetworkTimeout(
+    getDoc(ref),
+    "Loading your profile",
+    READ_TIMEOUT_MS,
+  );
   if (existing.exists()) return;
 
-  await setDoc(
-    ref,
-    {
-      uid: input.uid,
-      email: input.email,
-      displayName: input.displayName ?? input.email?.split("@")[0] ?? "MedAssist user",
-      photoURL: input.photoURL,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      defaultAge: null,
-      defaultSex: null,
-      isDemo: false,
-      settings: DEFAULT_SETTINGS,
-    },
-    { merge: true },
+  await withNetworkTimeout(
+    setDoc(
+      ref,
+      {
+        uid: input.uid,
+        email: input.email,
+        displayName: input.displayName ?? input.email?.split("@")[0] ?? "MedAssist user",
+        photoURL: input.photoURL,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        defaultAge: null,
+        defaultSex: null,
+        isDemo: false,
+        settings: DEFAULT_SETTINGS,
+      },
+      { merge: true },
+    ),
+    "Saving your profile",
+    WRITE_TIMEOUT_MS,
   );
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const { db } = requireFirebase();
   assertSafeId(uid, "user id");
-  const snapshot = await getDoc(doc(db, COLLECTIONS.users, uid));
+  const snapshot = await withNetworkTimeout(
+    getDoc(doc(db, COLLECTIONS.users, uid)),
+    "Loading your profile",
+    READ_TIMEOUT_MS,
+  );
   if (!snapshot.exists()) return null;
 
   const data = snapshot.data();
@@ -195,7 +252,11 @@ export async function updateUserProfile(
     payload.settings = { ...(existing?.settings ?? DEFAULT_SETTINGS), ...patch.settings };
   }
 
-  await setDoc(doc(db, COLLECTIONS.users, uid), payload, { merge: true });
+  await withNetworkTimeout(
+    setDoc(doc(db, COLLECTIONS.users, uid), payload, { merge: true }),
+    "Saving your profile",
+    WRITE_TIMEOUT_MS,
+  );
 }
 
 export async function deleteUserAccount(): Promise<void> {
@@ -288,7 +349,11 @@ export async function createAssessment(input: CreateAssessmentInput): Promise<As
     caseData: input.caseData,
   };
 
-  await setDoc(doc(db, COLLECTIONS.assessments, id), record);
+  await withNetworkTimeout(
+    setDoc(doc(db, COLLECTIONS.assessments, id), record),
+    "Creating your assessment",
+    WRITE_TIMEOUT_MS,
+  );
   return record;
 }
 
@@ -297,7 +362,11 @@ export async function getAssessment(userId: string, assessmentId: string): Promi
   requireUid();
   assertSafeId(assessmentId, "assessment id");
 
-  const snapshot = await getDoc(doc(db, COLLECTIONS.assessments, assessmentId));
+  const snapshot = await withNetworkTimeout(
+    getDoc(doc(db, COLLECTIONS.assessments, assessmentId)),
+    "Loading this assessment",
+    READ_TIMEOUT_MS,
+  );
   if (!snapshot.exists()) return null;
 
   const data = snapshot.data() as AssessmentDoc;
@@ -319,9 +388,15 @@ export async function updateAssessment(
   const existing = await getAssessment(userId, assessmentId);
   if (!existing) throw new Error("Assessment not found.");
 
-  await setDoc(doc(db, COLLECTIONS.assessments, assessmentId), { ...patch, updatedAt: nowIso() }, {
-    merge: true,
-  });
+  await withNetworkTimeout(
+    setDoc(
+      doc(db, COLLECTIONS.assessments, assessmentId),
+      { ...patch, updatedAt: nowIso() },
+      { merge: true },
+    ),
+    "Saving your progress",
+    WRITE_TIMEOUT_MS,
+  );
 }
 
 export async function deleteAssessment(userId: string, assessmentId: string): Promise<void> {
@@ -436,7 +511,7 @@ export async function saveAnswers(
       { ...answer, assessmentId, userId: uid, createdAt: now, updatedAt: now },
     );
   }
-  await batch.commit();
+  await withNetworkTimeout(batch.commit(), "Saving your answers", WRITE_TIMEOUT_MS);
   return answers.length;
 }
 
@@ -494,14 +569,18 @@ export async function uploadFile(
     },
   );
 
-  await new Promise<void>((resolve, reject) => {
-    task.on(
-      "state_changed",
-      () => undefined,
-      (error) => reject(error),
-      () => resolve(),
-    );
-  });
+  await withNetworkTimeout(
+    new Promise<void>((resolve, reject) => {
+      task.on(
+        "state_changed",
+        () => undefined,
+        (error) => reject(error),
+        () => resolve(),
+      );
+    }),
+    "Uploading this document",
+    UPLOAD_TIMEOUT_MS,
+  );
 
   const now = nowIso();
   const record: UploadRecord = {
@@ -524,7 +603,11 @@ export async function uploadFile(
     errorCode: null,
   };
 
-  await setDoc(doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, id), record);
+  await withNetworkTimeout(
+    setDoc(doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, id), record),
+    "Registering this document",
+    WRITE_TIMEOUT_MS,
+  );
 
   await updateAssessment(userId, assessmentId, {
     fileCount: (assessment.fileCount ?? 0) + 1,
@@ -534,7 +617,11 @@ export async function uploadFile(
   let previewUrl: string | null = null;
   if (params.mimeType.startsWith("image/")) {
     // The signed read rule allows this for the owner only.
-    previewUrl = await getDownloadURL(storageRef(storage, storagePath)).catch(() => null);
+    previewUrl = await withNetworkTimeout(
+      getDownloadURL(storageRef(storage, storagePath)).catch(() => null),
+      "Loading this document preview",
+      READ_TIMEOUT_MS,
+    );
   }
 
   return { record, previewUrl };
@@ -551,10 +638,14 @@ export async function updateUpload(
   assertSafeId(assessmentId, "assessment id");
   assertSafeId(uploadId, "upload id");
 
-  await setDoc(
-    doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, uploadId),
-    { ...patch, updatedAt: nowIso() },
-    { merge: true },
+  await withNetworkTimeout(
+    setDoc(
+      doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, uploadId),
+      { ...patch, updatedAt: nowIso() },
+      { merge: true },
+    ),
+    "Updating this document",
+    WRITE_TIMEOUT_MS,
   );
 }
 
@@ -566,8 +657,10 @@ export async function listUploads(userId: string, assessmentId: string): Promise
   const assessment = await getAssessment(userId, assessmentId);
   if (!assessment) return [];
 
-  const snapshot = await getDocs(
-    collection(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads),
+  const snapshot = await withNetworkTimeout(
+    getDocs(collection(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads)),
+    "Loading this assessment's documents",
+    LIST_TIMEOUT_MS,
   );
 
   return snapshot.docs
@@ -585,8 +678,10 @@ export async function deleteUpload(
   assertSafeId(assessmentId, "assessment id");
   assertSafeId(uploadId, "upload id");
 
-  const snapshot = await getDoc(
-    doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, uploadId),
+  const snapshot = await withNetworkTimeout(
+    getDoc(doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, uploadId)),
+    "Loading this document",
+    READ_TIMEOUT_MS,
   );
   if (!snapshot.exists()) return;
 
@@ -594,7 +689,11 @@ export async function deleteUpload(
   if (record.userId !== userId) return;
 
   await deleteObject(storageRef(storage, record.storagePath)).catch(() => undefined);
-  await deleteDoc(doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, uploadId));
+  await withNetworkTimeout(
+    deleteDoc(doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, uploadId)),
+    "Removing this document",
+    WRITE_TIMEOUT_MS,
+  );
 
   const remaining = (await listUploads(userId, assessmentId)).length;
   await updateAssessment(userId, assessmentId, { fileCount: remaining });
@@ -632,9 +731,10 @@ export async function saveAnalysis(input: SaveAnalysisInput): Promise<StoredAnal
     audit: input.audit,
   };
 
-  await setDoc(
-    doc(db, COLLECTIONS.assessments, input.assessmentId, COLLECTIONS.analysis, id),
-    record,
+  await withNetworkTimeout(
+    setDoc(doc(db, COLLECTIONS.assessments, input.assessmentId, COLLECTIONS.analysis, id), record),
+    "Saving your results",
+    WRITE_TIMEOUT_MS,
   );
   return record;
 }
@@ -650,12 +750,16 @@ export async function getLatestAnalysis(
   const assessment = await getAssessment(userId, assessmentId);
   if (!assessment) return null;
 
-  const snapshot = await getDocs(
-    fsQuery(
-      collection(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.analysis),
-      orderBy("createdAt", "desc"),
-      fsLimit(1),
+  const snapshot = await withNetworkTimeout(
+    getDocs(
+      fsQuery(
+        collection(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.analysis),
+        orderBy("createdAt", "desc"),
+        fsLimit(1),
+      ),
     ),
+    "Loading your results",
+    LIST_TIMEOUT_MS,
   );
 
   const item = snapshot.docs[0] as QueryDocumentSnapshot<DocumentData> | undefined;
@@ -681,7 +785,11 @@ export async function saveReport(userId: string, assessmentId: string, title: st
     shareEnabled: false,
   };
 
-  await setDoc(doc(db, COLLECTIONS.reports, id), { ...record, userId: uid });
+  await withNetworkTimeout(
+    setDoc(doc(db, COLLECTIONS.reports, id), { ...record, userId: uid }),
+    "Saving your report",
+    WRITE_TIMEOUT_MS,
+  );
   return record;
 }
 
@@ -689,13 +797,17 @@ export async function listReports(limit = 25): Promise<ReportRecord[]> {
   const { db } = requireFirebase();
   const uid = requireUid();
 
-  const snapshot = await getDocs(
-    fsQuery(
-      collection(db, COLLECTIONS.reports),
-      where("userId", "==", uid),
-      orderBy("createdAt", "desc"),
-      fsLimit(Math.min(Math.max(limit, 1), 50)),
+  const snapshot = await withNetworkTimeout(
+    getDocs(
+      fsQuery(
+        collection(db, COLLECTIONS.reports),
+        where("userId", "==", uid),
+        orderBy("createdAt", "desc"),
+        fsLimit(Math.min(Math.max(limit, 1), 50)),
+      ),
     ),
+    "Loading your reports",
+    LIST_TIMEOUT_MS,
   );
 
   return snapshot.docs.map((item) => {
@@ -733,11 +845,15 @@ export async function setReportSharing(reportId: string, enabled: boolean): Prom
     if (assessment) sharedAnalysis = await getLatestAnalysis(uid, assessment.id);
   }
 
-  await setDoc(
-    doc(db, COLLECTIONS.reports, reportId),
-    // Disabling sharing must also remove the snapshot, not merely hide it.
-    { shareEnabled: enabled, shareId, sharedAnalysis: sharedAnalysis ?? null },
-    { merge: true },
+  await withNetworkTimeout(
+    setDoc(
+      doc(db, COLLECTIONS.reports, reportId),
+      // Disabling sharing must also remove the snapshot, not merely hide it.
+      { shareEnabled: enabled, shareId, sharedAnalysis: sharedAnalysis ?? null },
+      { merge: true },
+    ),
+    "Updating your report",
+    WRITE_TIMEOUT_MS,
   );
 
   return { ...data, shareEnabled: enabled, shareId };

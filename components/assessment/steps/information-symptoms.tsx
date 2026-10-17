@@ -67,7 +67,9 @@ export function StepInformation() {
     setSaving(true);
     try {
       await createAssessment({ caseData });
-      await runSafetyCheck(caseData);
+      // The deterministic red-flag scan is advisory here: it must never delay
+      // the step advance, and the symptoms step re-runs it on Continue anyway.
+      void runSafetyCheck(caseData);
       dispatch({ type: "setStep", payload: 1 as WizardStep });
     } catch {
       // The store surfaces a save error while preserving the entered values.
@@ -215,7 +217,8 @@ export function StepSymptoms() {
 
     setSaving(true);
     try {
-      await runSafetyCheck(caseData);
+      // Non-blocking so a stalled network can never hold the Continue button.
+      void runSafetyCheck(caseData);
       await save(caseData, 1);
       dispatch({ type: "setStep", payload: 2 as WizardStep });
     } catch {
