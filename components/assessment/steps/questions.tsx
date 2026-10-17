@@ -155,7 +155,9 @@ export function StepQuestions() {
   const [loading, setLoading] = React.useState(
     state.questions.length === 0 && state.questionsSource === "pending",
   );
+  const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const requestedRef = React.useRef(false);
   const { loadQuestions } = useQuestionLoader();
 
   const load = React.useCallback(async () => {
@@ -171,12 +173,10 @@ export function StepQuestions() {
   }, [loadQuestions]);
 
   React.useEffect(() => {
-    if (state.questionsSource === "pending" && !loading) {
-      void load();
-    }
-    // Intentionally runs once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (state.questionsSource !== "pending" || requestedRef.current) return;
+    requestedRef.current = true;
+    void load();
+  }, [load, state.questionsSource]);
 
   // Re-run the deterministic safety layer as answers arrive. Free — no model call,
   // so this can safely run on every change and surface an emergency immediately.
@@ -198,8 +198,17 @@ export function StepQuestions() {
   };
 
   const goNext = async () => {
-    await save(state.caseData, 2);
-    dispatch({ type: "setStep", payload: 3 as WizardStep });
+    if (saving) return;
+    setSaving(true);
+    try {
+      await save(state.caseData, 2);
+      dispatch({ type: "setStep", payload: 3 as WizardStep });
+    } catch {
+      // The store records a user-facing save error, and the user remains here
+      // with their answers intact so they can retry safely.
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -296,9 +305,9 @@ export function StepQuestions() {
       <WizardNav
         onBack={() => dispatch({ type: "setStep", payload: 1 as WizardStep })}
         onNext={goNext}
-        nextLabel={loading ? "Loading questions" : "Continue to documents"}
-        nextBusy={loading}
-        nextDisabled={loading}
+        nextLabel={loading ? "Loading questions" : saving ? "Saving your answers" : "Continue to documents"}
+        nextBusy={loading || saving}
+        nextDisabled={loading || saving}
         hint={
           state.questions.length > 0
             ? `${answered} of ${state.questions.length} answered. Skipped questions are recorded as unanswered.`

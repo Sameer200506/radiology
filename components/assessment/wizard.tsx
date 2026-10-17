@@ -4,7 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Beaker, FileText, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowLeft, Beaker, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +47,10 @@ export function AssessmentWizard() {
   const router = useRouter();
   const { state, dispatch, createAssessment } = useWizard();
   const { user } = useAuth();
-  const [showStart, setShowStart] = React.useState(state.step === 0 && !state.isDemo);
+  // A draft starts with an id before its async data has loaded, so it must not
+  // be hidden behind the new-assessment chooser.
+  const [showStart, setShowStart] = React.useState(() => state.assessmentId === null);
+  const [startingDemo, setStartingDemo] = React.useState<string | null>(null);
 
   // The report is rendered from the same snapshot the analysis actually used,
   // so print, PDF and screen cannot drift apart.
@@ -73,9 +76,43 @@ export function AssessmentWizard() {
   };
 
   const startDemo = async (scenarioId: string) => {
-    setShowStart(false);
-    await createAssessment({ demo: true, scenarioId });
+    if (startingDemo) return;
+    setStartingDemo(scenarioId);
+    dispatch({ type: "clearError" });
+    try {
+      await createAssessment({ demo: true, scenarioId });
+      setShowStart(false);
+    } catch {
+      // The provider exposes the creation error in the chooser, so the person
+      // can try again without being sent into an unsaved demo state.
+      setShowStart(true);
+    } finally {
+      setStartingDemo(null);
+    }
   };
+
+  const startFromScratch = () => {
+    dispatch({ type: "clearError" });
+    setShowStart(false);
+  };
+
+  const startOver = () => {
+    dispatch({ type: "reset" });
+    setShowStart(true);
+    // Next.js preserves client state for same-route navigations. Reset the
+    // store explicitly, then remove any stale draft id from the address bar.
+    router.replace("/assessment/new");
+  };
+
+  if (state.hydratingDraft) {
+    return (
+      <div className="glass flex min-h-64 flex-col items-center justify-center rounded-3xl p-6 text-center" role="status" aria-live="polite">
+        <Loader2 className="size-5 animate-spin text-brand" aria-hidden="true" />
+        <p className="mt-3 text-sm font-medium text-ink">Restoring your assessment</p>
+        <p className="mt-1 text-sm text-muted">Loading your saved information and uploads…</p>
+      </div>
+    );
+  }
 
   if (showStart) {
     return (
@@ -87,6 +124,7 @@ export function AssessmentWizard() {
             Start from scratch, or explore the whole workflow with a synthetic demo patient first.
             The demo data is invented — no real medical information is involved.
           </p>
+          {state.error ? <WorkflowError message={state.error} /> : null}
         </header>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -96,7 +134,7 @@ export function AssessmentWizard() {
               Describe your own symptoms and optionally upload your own reports. Everything stays in
               your account and you can delete it at any time.
             </p>
-            <Button className="mt-6" size="lg" onClick={() => setShowStart(false)}>
+            <Button className="mt-6" size="lg" onClick={startFromScratch} disabled={startingDemo !== null}>
               Start assessment
               <Sparkles className="size-4" aria-hidden="true" />
             </Button>
@@ -117,9 +155,14 @@ export function AssessmentWizard() {
                   <button
                     type="button"
                     onClick={() => void startDemo(scenario.id)}
+                    disabled={startingDemo !== null}
                     className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface/50 px-3.5 py-3 text-left transition-colors hover:border-accent/45 hover:bg-accent/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                   >
-                    <FileText className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                    {startingDemo === scenario.id ? (
+                      <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
+                    ) : (
+                      <FileText className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                    )}
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-ink">
                         {scenario.name}
@@ -156,6 +199,8 @@ export function AssessmentWizard() {
 
       <ProgressIndicator step={state.step} maxStepReached={state.maxStepReached} onNavigate={navigate} />
 
+      {state.error && state.step !== 4 ? <WorkflowError message={state.error} /> : null}
+
       {state.step <= 2 && state.triage?.emergencyNotice ? (
         <div className="mb-7">
           <EmergencyBanner triage={state.triage} />
@@ -173,10 +218,22 @@ export function AssessmentWizard() {
           analysis={analysisForReport}
           userId={user?.uid}
           onBackToAnalysis={() => dispatch({ type: "setStep", payload: 4 })}
-          onStartOver={() => router.push("/assessment/new")}
+          onStartOver={startOver}
         />
       ) : null}
     </div>
+  );
+}
+
+function WorkflowError({ message }: { message: string }) {
+  return (
+    <p
+      role="alert"
+      className="mt-4 flex items-start gap-2 rounded-2xl border border-critical/30 bg-critical/8 p-3.5 text-sm leading-relaxed text-ink"
+    >
+      <AlertCircle className="mt-0.5 size-4 shrink-0 text-critical" aria-hidden="true" />
+      {message}
+    </p>
   );
 }
 

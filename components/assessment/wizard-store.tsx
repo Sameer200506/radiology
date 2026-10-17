@@ -6,13 +6,16 @@ import { api, errorMessage } from "@/lib/api/client";
 import {
   createAssessment as createAssessmentRecord,
   getAssessment,
+  getLatestAnalysis,
   listUploads as readUploads,
   updateAssessment as patchAssessment,
   writeAuditLog,
 } from "@/lib/data";
+import { ASSESSMENT_STEP_STAGES, resumeStepForAssessment } from "@/lib/assessment/workflow";
 import { buildEmptyCase, summariseCase } from "@/lib/medical/empty-case";
 import { buildDemoCase, DEMO_SCENARIOS, pendingDemoDocuments } from "@/lib/medical/demo-data";
 import type { AssessmentResult, AuditMetadata, TriageResult } from "@/types/assessment";
+import type { UploadRecord } from "@/types/firebase";
 import type { DocumentKind, MedicalCase, MedicalDocument } from "@/types/medical";
 import type { MedicalQuestion } from "@/types/ai-primitives";
 import type { IntakeAnalysis } from "@/types/ai";
@@ -71,6 +74,8 @@ export interface AnalysisStageState {
 
 export interface WizardState {
   assessmentId: string | null;
+  /** A draft was requested in the URL and is still being restored. */
+  hydratingDraft: boolean;
   isDemo: boolean;
   demoScenarioId: string | null;
   caseData: MedicalCase;
@@ -111,6 +116,7 @@ const INITIAL_STAGES: AnalysisStageState[] = [
 function initialState(): WizardState {
   return {
     assessmentId: null,
+    hydratingDraft: false,
     isDemo: false,
     demoScenarioId: null,
     caseData: buildEmptyCase(),
@@ -128,7 +134,7 @@ function initialState(): WizardState {
     result: null,
     assessmentAudit: null,
     rulesetVersion: null,
-    stages: INITIAL_STAGES,
+    stages: INITIAL_STAGES.map((stage) => ({ ...stage })),
     busy: false,
     error: null,
     retryable: false,
@@ -299,6 +305,69 @@ export function seedUploadsFromCase(caseData: MedicalCase): UploadState[] {
   }));
 }
 
+/** Converts persisted upload metadata into the state used by the wizard UI. */
+function uploadStateFromRecord(record: UploadRecord, existing?: UploadState): UploadState {
+  const extractedText = record.extractedText ?? existing?.extractedText;
+  const analysis = record.analysis ?? existing?.analysis;
+  const imaging = record.imaging ?? existing?.imaging;
+
+  return {
+    ...(existing?.file ? { file: existing.file } : {}),
+    id: record.id,
+    fileName: record.fileName,
+    displayName: record.displayName,
+    mimeType: record.mimeType,
+    sizeBytes: record.sizeBytes,
+    kind: record.kind,
+    status: record.status,
+    previewUrl: existing?.previewUrl ?? (record.mimeType.startsWith("image/") ? null : undefined),
+    ...(extractedText ? { extractedText } : {}),
+    ...(analysis ? { analysis } : {}),
+    ...(imaging ? { imaging } : {}),
+    ...(existing?.extractionNotes ? { extractionNotes: existing.extractionNotes } : {}),
+    error:
+      existing?.error ??
+      (record.errorCode ? "This upload could not be processed. You can remove it or upload it again." : null),
+  };
+}
+
+/**
+ * Merges the case snapshot, live wizard files and upload records. Firestore
+ * upload metadata is the source of truth after a refresh; local state keeps
+ * the in-memory File that is needed for image analysis in the current session.
+ */
+function mergeUploads(
+  caseData: MedicalCase,
+  persisted: UploadRecord[],
+  current: UploadState[] = [],
+): UploadState[] {
+  const byId = new Map<string, UploadState>();
+
+  for (const upload of seedUploadsFromCase(caseData)) byId.set(upload.id, upload);
+  for (const upload of current) {
+    byId.set(upload.id, { ...byId.get(upload.id), ...upload });
+  }
+  for (const upload of persisted) {
+    byId.set(upload.id, uploadStateFromRecord(upload, byId.get(upload.id)));
+  }
+
+  return [...byId.values()];
+}
+
+function documentsFromUploads(uploads: UploadState[]): MedicalDocument[] {
+  return uploads.map((upload) => ({
+    id: upload.id,
+    kind: upload.kind,
+    fileName: upload.fileName,
+    mimeType: upload.mimeType,
+    sizeBytes: upload.sizeBytes,
+    ...(upload.extractedText ? { extractedText: upload.extractedText } : {}),
+    ...(upload.analysis ? { analysis: upload.analysis } : {}),
+    ...(upload.imaging ? { imaging: upload.imaging } : {}),
+    uploadStatus: upload.status,
+  }));
+}
+
 const WizardContext = React.createContext<{
   state: WizardState;
   dispatch: React.Dispatch<Action>;
@@ -308,12 +377,6 @@ const WizardContext = React.createContext<{
   runSafetyCheck: (caseData?: MedicalCase) => Promise<void>;
   refreshUploads: () => Promise<void>;
 } | null>(null);
-
-/** Signed-in uid, needed by every client-side repository call. */
-function useUid(): string | null {
-  const { user } = useAuth();
-  return user?.uid ?? null;
-}
 
 export function WizardProvider({
   children,
@@ -325,118 +388,205 @@ export function WizardProvider({
   const [state, dispatch] = React.useReducer(reducer, {
     ...initialState(),
     assessmentId: initialAssessmentId ?? null,
+    hydratingDraft: Boolean(initialAssessmentId),
   });
 
-  const uid = useUid();
+  const { user, ready } = useAuth();
+  const uid = user?.uid ?? null;
   const creatingRef = React.useRef<Promise<string> | null>(null);
 
   const save = React.useCallback(async (caseData = state.caseData, step = state.step) => {
     const id = state.assessmentId;
-    if (!id || !uid) return;
+    if (!id || !uid) {
+      const message = !uid
+        ? ready
+          ? "Please sign in before continuing your assessment."
+          : "Your sign-in is still loading. Please wait a moment and try again."
+        : "Your assessment is still being created. Please try again in a moment.";
+      dispatch({ type: "setError", payload: { message, retryable: true } });
+      throw new Error(message);
+    }
 
     try {
       await patchAssessment(uid, id, {
         caseData,
-        stage: STEP_LABELS[step],
+        stage: ASSESSMENT_STEP_STAGES[step],
+        status: "in_progress",
       });
     } catch (error) {
       const message = errorMessage(error);
       dispatch({ type: "setError", payload: { message: `Your draft could not be saved: ${message}`, retryable: true } });
       throw error;
     }
-  }, [uid, state.assessmentId, state.caseData, state.step]);
+  }, [ready, uid, state.assessmentId, state.caseData, state.step]);
 
   const createAssessment = React.useCallback(
     async (options: { demo?: boolean; scenarioId?: string; caseData?: MedicalCase } = {}) => {
       if (state.assessmentId) return state.assessmentId;
       if (creatingRef.current) return creatingRef.current;
 
-      const operation = (async () => {
-
-      if (options.demo) {
-        const scenarioId = options.scenarioId ?? "respiratory";
-        const demoCase = buildDemoCase(scenarioId);
-
-        dispatch({
-          type: "hydrate",
-          payload: {
-            caseData: demoCase,
-            uploads: seedUploadsFromCase(demoCase),
-            isDemo: true,
-            demoScenarioId: scenarioId,
-            step: 1,
-            maxStepReached: 1,
-          },
-        });
+      if (!uid) {
+        const message = ready
+          ? "Please sign in before starting an assessment."
+          : "Your sign-in is still loading. Please wait a moment and try again.";
+        dispatch({ type: "setError", payload: { message, retryable: true } });
+        throw new Error(message);
       }
 
-      const isDemo = options.demo === true;
-      const scenarioId = options.scenarioId ?? "respiratory";
-      const caseData = options.caseData ?? (isDemo ? buildDemoCase(scenarioId) : buildEmptyCase());
+      const operation = (async () => {
+        const isDemo = options.demo === true;
+        const scenarioId = options.scenarioId ?? "respiratory";
+        const caseData = options.caseData ?? (isDemo ? buildDemoCase(scenarioId) : buildEmptyCase());
 
-      // Straight to Firestore through the client SDK. The rules prove ownership
-      // from the signed-in uid; there is no server in this path.
-      const created = await createAssessmentRecord({
-        title: isDemo ? "Demo — Synthetic data" : "New assessment",
-        symptomSummary: isDemo ? "Synthetic demo scenario" : "Not yet described",
-        isDemo,
-        caseData,
-      });
+        try {
+          // Straight to Firestore through the client SDK. The rules prove ownership
+          // from the signed-in uid; there is no server in this path.
+          const created = await createAssessmentRecord({
+            title: isDemo ? "Demo — Synthetic data" : "New assessment",
+            symptomSummary: isDemo ? "Synthetic demo scenario" : "Not yet described",
+            isDemo,
+            caseData,
+          });
 
-      void writeAuditLog({
-        action: "assessment_created",
-        resourceType: "assessment",
-        resourceId: created.id,
-        metadata: { isDemo },
-      });
+          void writeAuditLog({
+            action: "assessment_created",
+            resourceType: "assessment",
+            resourceId: created.id,
+            metadata: { isDemo },
+          });
 
-      dispatch({
-        type: "hydrate",
-        payload: {
-          assessmentId: created.id,
-          caseData,
-          ...(isDemo ? { uploads: seedUploadsFromCase(caseData) } : {}),
-          isDemo,
-          ...(isDemo ? { demoScenarioId: scenarioId } : {}),
-          ...(isDemo ? { step: 1 as WizardStep, maxStepReached: 1 as WizardStep } : {}),
-        },
-      });
+          dispatch({
+            type: "hydrate",
+            payload: {
+              assessmentId: created.id,
+              hydratingDraft: false,
+              caseData,
+              ...(isDemo ? { uploads: seedUploadsFromCase(caseData) } : {}),
+              isDemo,
+              ...(isDemo ? { demoScenarioId: scenarioId } : {}),
+              ...(isDemo ? { step: 1 as WizardStep, maxStepReached: 1 as WizardStep } : {}),
+            },
+          });
 
-      return created.id;
+          return created.id;
+        } catch (error) {
+          dispatch({
+            type: "setError",
+            payload: {
+              message: `Your assessment could not be created: ${errorMessage(error)}`,
+              retryable: true,
+            },
+          });
+          throw error;
+        }
       })();
       creatingRef.current = operation;
       try { return await operation; } finally { creatingRef.current = null; }
     },
-    // `uid` guards against creating an assessment before auth resolves; the
-    // repository reads the current user itself.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.assessmentId, uid],
+    [ready, state.assessmentId, uid],
   );
 
   React.useEffect(() => {
-    if (!initialAssessmentId || !uid) return;
+    const draftId = initialAssessmentId?.trim();
+    if (!draftId) return;
     let cancelled = false;
-    void getAssessment(uid, initialAssessmentId).then((record) => {
-      if (cancelled) return;
-      if (!record) {
-        dispatch({ type: "setError", payload: { message: "This draft could not be found.", retryable: false } });
-        return;
+    if (!uid) {
+      if (ready) {
+        dispatch({
+          type: "hydrate",
+          payload: {
+            assessmentId: null,
+            hydratingDraft: false,
+            error: "Please sign in to resume this assessment.",
+            retryable: true,
+          },
+        });
       }
-      dispatch({ type: "hydrate", payload: {
-        assessmentId: record.id,
-        caseData: record.caseData,
-        isDemo: record.isDemo,
-        // Uploaded File objects cannot survive a reload. Resume at documents;
-        // the user can review the snapshot and attach files again if needed.
-        step: 3,
-        maxStepReached: 3,
-        uploads: seedUploadsFromCase(record.caseData),
-      } });
-    }).catch((error) => {
-      if (!cancelled) dispatch({ type: "setError", payload: { message: `Draft loading failed: ${errorMessage(error)}`, retryable: true } });
-    });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      try {
+        const record = await getAssessment(uid, draftId);
+        if (cancelled) return;
+        if (!record) {
+          dispatch({
+            type: "hydrate",
+            payload: {
+              assessmentId: null,
+              hydratingDraft: false,
+              error: "This draft could not be found.",
+              retryable: false,
+            },
+          });
+          return;
+        }
+
+        if (record.status === "complete") {
+          const analysis = await getLatestAnalysis(uid, record.id);
+          if (cancelled) return;
+          if (!analysis) throw new Error("The completed assessment result could not be found.");
+
+          dispatch({
+            type: "hydrate",
+            payload: {
+              assessmentId: record.id,
+              hydratingDraft: false,
+              caseData: analysis.caseData,
+              uploads: seedUploadsFromCase(analysis.caseData),
+              isDemo: record.isDemo,
+              intakeAudit: analysis.audit.intake ?? null,
+              assessmentAudit: analysis.audit.assessment ?? null,
+              triage: analysis.triage,
+              result: analysis.result,
+              step: 5 as WizardStep,
+              maxStepReached: 5 as WizardStep,
+              busy: false,
+              error: null,
+            },
+          });
+          return;
+        }
+
+        const persistedUploads = await readUploads(uid, record.id);
+        if (cancelled) return;
+        const uploads = mergeUploads(record.caseData, persistedUploads);
+        const step = resumeStepForAssessment(record);
+        const caseData = { ...record.caseData, documents: documentsFromUploads(uploads) };
+
+        dispatch({
+          type: "hydrate",
+          payload: {
+            assessmentId: record.id,
+            hydratingDraft: false,
+            caseData,
+            uploads,
+            isDemo: record.isDemo,
+            step,
+            maxStepReached: step,
+            busy: false,
+            error: null,
+          },
+        });
+      } catch (error) {
+        if (!cancelled) {
+          dispatch({
+            type: "hydrate",
+            payload: {
+              assessmentId: null,
+              hydratingDraft: false,
+              error: `Draft loading failed: ${errorMessage(error)}`,
+              retryable: true,
+            },
+          });
+        }
+      }
+    })();
+
     return () => { cancelled = true; };
-  }, [initialAssessmentId, uid]);
+  }, [initialAssessmentId, ready, uid]);
 
   const runSafetyCheck = React.useCallback(async (caseData = state.caseData) => {
     try {
@@ -457,20 +607,18 @@ export function WizardProvider({
     if (!id || !uid) return;
 
     try {
-      const uploads = await readUploads(uid, id);
+      const uploads = mergeUploads(state.caseData, await readUploads(uid, id), state.uploads);
       dispatch({
         type: "hydrate",
         payload: {
-          uploads: uploads.map((upload) => ({
-            ...upload,
-            previewUrl: upload.mimeType.startsWith("image/") ? null : undefined,
-          })),
+          uploads,
+          caseData: { ...state.caseData, documents: documentsFromUploads(uploads) },
         },
       });
     } catch (error) {
       console.warn("[wizard] upload refresh failed:", errorMessage(error));
     }
-  }, [state.assessmentId, uid]);
+  }, [state.assessmentId, state.caseData, state.uploads, uid]);
 
   const value = React.useMemo(
     () => ({ state, dispatch, save, createAssessment, runSafetyCheck, refreshUploads }),
@@ -495,21 +643,9 @@ export function documentsNeedingAnalysis(state: WizardState) {
 
 /** Builds the case snapshot sent to the final assessment. */
 export function buildAssessmentCase(state: WizardState): MedicalCase {
-  const documents: MedicalDocument[] = state.uploads.map((upload) => ({
-    id: upload.id,
-    kind: upload.kind as MedicalDocument["kind"],
-    fileName: upload.fileName,
-    mimeType: upload.mimeType,
-    sizeBytes: upload.sizeBytes,
-    ...(upload.extractedText ? { extractedText: upload.extractedText } : {}),
-    ...(upload.analysis ? { analysis: upload.analysis } : {}),
-    ...(upload.imaging ? { imaging: upload.imaging } : {}),
-    uploadStatus: upload.status === "analyzed" ? "analyzed" : upload.status === "uploaded" ? "uploaded" : "pending",
-  }));
-
   return {
     ...state.caseData,
-    documents,
+    documents: documentsFromUploads(state.uploads),
     freeText: state.caseData.freeText,
   };
 }

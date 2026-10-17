@@ -47,8 +47,10 @@ export function StepInformation() {
   const { state, dispatch, createAssessment, runSafetyCheck } = useWizard();
   const [age, setAge] = React.useState(state.caseData.demographics.age?.toString() ?? "");
   const [sex, setSex] = React.useState<Sex>(state.caseData.demographics.sex ?? "");
+  const [saving, setSaving] = React.useState(false);
 
   const goNext = async () => {
+    if (saving) return;
     const parsedAge = age.trim() === "" ? undefined : Number.parseInt(age, 10);
     const validAge =
       parsedAge !== undefined && Number.isFinite(parsedAge) && parsedAge >= 0 && parsedAge <= 130
@@ -56,17 +58,22 @@ export function StepInformation() {
         : undefined;
 
     const demographics = {
-      ...state.caseData.demographics,
       ...(validAge !== undefined ? { age: validAge } : {}),
       ...(sex ? { sex } : {}),
     };
     const caseData: MedicalCase = { ...state.caseData, demographics };
 
-    dispatch({ type: "setDemographics", payload: demographics });
-
-    await createAssessment({ caseData });
-    await runSafetyCheck(caseData);
-    dispatch({ type: "setStep", payload: 1 as WizardStep });
+    dispatch({ type: "setCaseField", payload: { field: "demographics", value: demographics } });
+    setSaving(true);
+    try {
+      await createAssessment({ caseData });
+      await runSafetyCheck(caseData);
+      dispatch({ type: "setStep", payload: 1 as WizardStep });
+    } catch {
+      // The store surfaces a save error while preserving the entered values.
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -149,7 +156,13 @@ export function StepInformation() {
 
       <MedicalDisclaimer />
 
-      <WizardNav onBack={undefined} onNext={goNext} nextLabel="Continue to symptoms" />
+      <WizardNav
+        onBack={undefined}
+        onNext={goNext}
+        nextLabel={saving ? "Saving your information" : "Continue to symptoms"}
+        nextBusy={saving}
+        nextDisabled={saving}
+      />
     </div>
   );
 }
@@ -168,6 +181,7 @@ export function StepSymptoms() {
     state.caseData.symptoms.find((s) => s.severity)?.severity ?? "",
   );
   const [textError, setTextError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
 
   const toggle = (symptom: string) => {
     setSelected((current) =>
@@ -178,6 +192,7 @@ export function StepSymptoms() {
   const canContinue = selected.length > 0 || freeText.trim().length >= 4;
 
   const goNext = async () => {
+    if (saving) return;
     if (selected.length === 0 && freeText.trim().length < 4) {
       setTextError("Choose at least one symptom, or describe the problem in your own words.");
       return;
@@ -198,9 +213,16 @@ export function StepSymptoms() {
     dispatch({ type: "setCaseField", payload: { field: "symptoms", value: symptoms } });
     dispatch({ type: "setCaseField", payload: { field: "freeText", value: freeText.trim() } });
 
-    await runSafetyCheck(caseData);
-    await save(caseData, 1);
-    dispatch({ type: "setStep", payload: 2 as WizardStep });
+    setSaving(true);
+    try {
+      await runSafetyCheck(caseData);
+      await save(caseData, 1);
+      dispatch({ type: "setStep", payload: 2 as WizardStep });
+    } catch {
+      // The store surfaces a save error while preserving the entered values.
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -333,8 +355,9 @@ export function StepSymptoms() {
       <WizardNav
         onBack={() => dispatch({ type: "setStep", payload: 0 as WizardStep })}
         onNext={goNext}
-        nextDisabled={!canContinue}
-        nextLabel="Continue to questions"
+        nextDisabled={!canContinue || saving}
+        nextBusy={saving}
+        nextLabel={saving ? "Saving your symptoms" : "Continue to questions"}
       />
     </div>
   );

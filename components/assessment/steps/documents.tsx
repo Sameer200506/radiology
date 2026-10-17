@@ -24,7 +24,12 @@ import { UploadDropzone } from "@/components/uploads/uploader";
 import { WizardNav } from "@/components/assessment/steps/information-symptoms";
 import { ImageViewer } from "@/components/imaging/image-viewer";
 import { useAuth } from "@/components/auth/auth-provider";
-import { useWizard, type UploadState, type WizardStep } from "@/components/assessment/wizard-store";
+import {
+  buildAssessmentCase,
+  useWizard,
+  type UploadState,
+  type WizardStep,
+} from "@/components/assessment/wizard-store";
 import { api, errorMessage } from "@/lib/api/client";
 import { deleteUpload, updateUpload, uploadFile, writeAuditLog } from "@/lib/data";
 import { guessDocumentKind, sanitizeFileName, shortenFileName } from "@/lib/security/upload-policy";
@@ -55,6 +60,7 @@ export function StepDocuments() {
   const [pastedFor, setPastedFor] = React.useState<UploadState | null>(null);
   const [pastedText, setPastedText] = React.useState("");
   const [analysing, setAnalysing] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
 
   const visionAvailable = isVisionAnalysisAvailableHint();
 
@@ -238,6 +244,25 @@ export function StepDocuments() {
 
   const allUploads = state.uploads;
   const unreadable = allUploads.filter((upload) => !upload.analysis && !upload.extractedText);
+  const processingUploads = Boolean(analysing) || allUploads.some((upload) => upload.uploading);
+
+  const continueToAnalysis = async () => {
+    if (saving || processingUploads) return;
+    setSaving(true);
+    const caseData = buildAssessmentCase(state);
+
+    try {
+      await save(caseData, 3);
+      // Keep the stored snapshot in sync with the uploads currently visible in
+      // the wizard, so a refresh never drops a document before analysis starts.
+      dispatch({ type: "hydrate", payload: { caseData } });
+      dispatch({ type: "setStep", payload: 4 as WizardStep });
+    } catch {
+      // The store displays the persistence error and leaves this step intact.
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-7">
@@ -435,13 +460,14 @@ export function StepDocuments() {
 
       <WizardNav
         onBack={() => dispatch({ type: "setStep", payload: 2 as WizardStep })}
-        onNext={async () => {
-          await save(state.caseData, 3);
-          dispatch({ type: "setStep", payload: 4 as WizardStep });
-        }}
-        nextLabel="Analyse my information"
+        onNext={continueToAnalysis}
+        nextBusy={saving}
+        nextDisabled={saving || processingUploads}
+        nextLabel={saving ? "Saving your documents" : "Analyse my information"}
         hint={
-          allUploads.length === 0
+          processingUploads
+            ? "Finish the current upload or document analysis before continuing."
+            : allUploads.length === 0
             ? "You can continue without uploading anything."
             : "Everything is analysed during the next step."
         }

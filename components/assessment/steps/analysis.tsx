@@ -77,6 +77,21 @@ export function StepAnalysis() {
       const assessmentId = state.assessmentId;
       const currentUploads = state.uploads;
 
+      // Mark this before any model work starts. If the page reloads or the
+      // network drops, the dashboard can route the person back here to retry
+      // instead of treating the assessment as an untouched draft.
+      await patchAssessment(uid, assessmentId, {
+        status: "analyzing",
+        stage: "analysis",
+        caseData: buildAssessmentCase(state),
+      });
+      void writeAuditLog({
+        action: "analysis_started",
+        resourceType: "assessment",
+        resourceId: assessmentId,
+        metadata: { isDemo: state.isDemo },
+      });
+
       // Patches applied to uploads during this run. Kept alongside the dispatch
       // calls because `state` cannot be re-read mid-run.
       const uploadPatches = new Map<string, Partial<typeof state.uploads[number]>>();
@@ -287,7 +302,7 @@ export function StepAnalysis() {
 
       await patchAssessment(uid, assessmentId, {
         status: "complete",
-        stage: "complete",
+        stage: "assessment",
         urgency: response.result.urgency.level,
         symptomSummary: buildSymptomSummary(caseData.symptoms, caseData.freeText),
         caseData,
@@ -324,6 +339,20 @@ export function StepAnalysis() {
 
       setStage("assessment", "done");
     } catch (error) {
+      if (uid && state.assessmentId) {
+        // Keep the original error for the user. A failed status write must not
+        // hide it or prevent the retry button from appearing.
+        void patchAssessment(uid, state.assessmentId, {
+          status: "failed",
+          stage: "analysis",
+        }).catch(() => undefined);
+        void writeAuditLog({
+          action: "analysis_failed",
+          resourceType: "assessment",
+          resourceId: state.assessmentId,
+          metadata: { retryable: isRetryable(error) },
+        });
+      }
       dispatch({
         type: "setError",
         payload: { message: errorMessage(error, "The analysis could not be completed."), retryable: isRetryable(error) },

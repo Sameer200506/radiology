@@ -23,6 +23,7 @@ import { AssessmentCardSkeleton, EmptyState } from "@/components/ui/skeleton";
 import { useAuth } from "@/components/auth/auth-provider";
 import { errorMessage } from "@/lib/api/client";
 import { listAssessments, listReports } from "@/lib/data";
+import { isAssessmentResumable } from "@/lib/assessment/workflow";
 import { urgencyPresentation } from "@/lib/medical/urgency";
 import type { AssessmentSummary } from "@/types/assessment";
 import type { UrgencyLevel } from "@/types/medical";
@@ -374,7 +375,14 @@ export function AssessmentCard({ item }: { item: AssessmentSummary }) {
   const presentation = item.urgency ? urgencyPresentation(item.urgency) : null;
 
   return (
-    <Link href={item.status === "draft" || item.status === "in_progress" ? `/assessment/new?draft=${encodeURIComponent(item.id)}` : `/dashboard/assessments/${item.id}`} className="group block">
+    <Link
+      href={
+        isAssessmentResumable(item.status)
+          ? `/assessment/new?draft=${encodeURIComponent(item.id)}`
+          : `/dashboard/assessments/${item.id}`
+      }
+      className="group block"
+    >
       <Card variant="glass" hover="lift" padding="sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">

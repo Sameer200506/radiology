@@ -276,7 +276,9 @@ export async function createAssessment(input: CreateAssessmentInput): Promise<As
     userId: uid,
     title: input.title.slice(0, 160),
     symptomSummary: input.symptomSummary.slice(0, 200),
-    status: "draft",
+    // A record is created only after the person completes the information
+    // screen, so it is already an active assessment rather than an empty draft.
+    status: "in_progress",
     stage: "information",
     urgency: null,
     fileCount: 0,
