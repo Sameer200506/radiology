@@ -203,6 +203,23 @@ npm install
 5. **Project settings → General → Your apps → Web (`</>`)** → register an app.
    - Copy the six `firebaseConfig` values. These go into `.env.local`.
 
+> **The missing-database trap.** Sign-in only needs Authentication, so a project
+> where step 3 was skipped *appears* healthy — and then saves nothing. With no
+> Cloud Firestore database the browser SDK retries every write forever with a
+> `NOT_FOUND` on the wire, and the assessment wizard hangs on "Saving…". Confirm
+> with the REST check below; fix by creating the database at
+> <https://console.cloud.google.com/datastore/setup?project=YOUR_PROJECT_ID>
+> and then deploying the rules (4.5).
+
+**Quick check that Firestore exists for the configured project** (replace the placeholders):
+
+```bash
+curl "https://firestore.googleapis.com/v1/projects/PROJECT_ID/databases/(default)/documents/users/probe?key=API_KEY"
+```
+
+`404 … The database (default) does not exist for project …` means step 3 above was never done for
+the project id in `.env.local`. All Firestore writes will hang until the database is created.
+
 ### 4.3 Get an OpenRouter key
 
 1. Go to <https://openrouter.ai/keys> → **Create key**.

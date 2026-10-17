@@ -131,7 +131,11 @@ async function withNetworkTimeout<T>(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      reject(new Error(`${action} is taking too long. Check your connection and try again.`));
+      reject(
+        new Error(
+          `${action} is taking too long. Check your connection and try again. If this keeps happening, the Firebase project may be missing its Cloud Firestore database (README section 4.2 → "Create database").`,
+        ),
+      );
     }, timeoutMs);
   });
 
