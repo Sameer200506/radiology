@@ -220,10 +220,20 @@ curl "https://firestore.googleapis.com/v1/projects/PROJECT_ID/databases/(default
 `404 … The database (default) does not exist for project …` means step 3 above was never done for
 the project id in `.env.local`. All Firestore writes will hang until the database is created.
 
-### 4.3 Get an OpenRouter key
+### 4.3 Get an AI provider key
 
-1. Go to <https://openrouter.ai/keys> → **Create key**.
-2. Copy it. This is a **server-only** secret. Never prefix it with `NEXT_PUBLIC_`.
+The app ships with two interchangeable AI providers — **either key is enough**:
+
+- **OpenRouter** (default): <https://openrouter.ai/keys> → **Create key**. The `auto` model id
+  routes to whichever free model is currently healthy, which survives free-tier churn without a
+  deploy. Requires the network to reach openrouter.ai — some ISPs block it entirely.
+- **Google Gemini**: <https://aistudio.google.com/apikey> → **Create API key** (free tier is fine).
+  Reachable wherever Google is. **If openrouter.ai is blocked on your network, use this.** When
+  `GEMINI_API_KEY` is set it takes precedence, and the app uses plain Gemini model ids such as
+  `gemini-2.5-flash`.
+
+Copy the chosen key into the matching variable in `.env.local`. It is a **server-only** secret:
+never prefix it with `NEXT_PUBLIC_`, and never reference it from a client component.
 
 ### 4.4 Configure environment variables
 
@@ -322,19 +332,25 @@ deployment capabilities panel reports AI and image analysis correctly.
 | `OPENROUTER_IMAGE_MODEL` | Optional vision model id | Server only |
 | `OPENROUTER_TIMEOUT_MS` | Optional. Default `45000` | Server only |
 | `OPENROUTER_MAX_TOKENS` | Optional. Default `2048` | Server only |
+| `GEMINI_API_KEY` | <https://aistudio.google.com/apikey> — takes precedence when set | **Server only** |
+| `GEMINI_MODEL` | Configuration. Default `gemini-2.5-flash` | Server only |
+| `GEMINI_FALLBACK_MODEL` | Configuration. Default `gemini-2.0-flash` | Server only |
+| `GEMINI_IMAGE_MODEL` | Optional vision override | Server only |
+| `GEMINI_TIMEOUT_MS` / `GEMINI_MAX_TOKENS` | Optional. Provider-scoped tuning | Server only |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase console → Service accounts | **Server only** |
 | `FIREBASE_ADMIN_PROJECT_ID` / `_CLIENT_EMAIL` / `_PRIVATE_KEY` | same, split form | **Server only** |
 | `FIREBASE_STORAGE_BUCKET` | Optional Admin bucket override | Server only |
 | `NEXT_PUBLIC_APP_URL` | Deployment origin | Public |
 
-**Required:** the seven `NEXT_PUBLIC_FIREBASE_*` values, `OPENROUTER_API_KEY`, and
-`NEXT_PUBLIC_APP_URL`. Everything Firebase Admin is optional — it only lengthens the session cookie.
+**Required:** the six `NEXT_PUBLIC_FIREBASE_*` values, one AI provider key (`OPENROUTER_API_KEY`
+**or** `GEMINI_API_KEY`), and `NEXT_PUBLIC_APP_URL`. Everything Firebase Admin is optional — it
+only lengthens the session cookie.
 
 The `NEXT_PUBLIC_FIREBASE_*` values are designed to be public — they identify the project and
 authorise the client SDK. Security comes from Authentication plus Security Rules, never from
-hiding them. Everything else is server-only; `lib/ai/openrouter.ts` and `lib/firebase/admin.ts`
-both `import "server-only"`, so an accidental client import fails the build rather than shipping a
-credential.
+hiding them. Everything else is server-only; `lib/ai/openrouter.ts`, `lib/ai/gemini.ts` and
+`lib/firebase/admin.ts` all `import "server-only"`, so an accidental client import fails the
+build rather than shipping a credential.
 
 ---
 
