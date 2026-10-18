@@ -404,7 +404,13 @@ export async function complete(options: CompletionOptions): Promise<CompletionRe
           aiError.retryable &&
           (aiError.code === "AI_RATE_LIMITED" ||
             aiError.code === "AI_PROVIDER_ERROR" ||
-            aiError.code === "AI_TIMEOUT");
+            aiError.code === "AI_TIMEOUT" ||
+            // Transient model-side failures: the model exists but is momentarily
+            // overloaded (Gemini 503 high-demand) or rolled (404 during a model
+            // migration). The fallback model in the chain is tried anyway; this
+            // just gives the primary one more chance after a short backoff.
+            aiError.code === "AI_MODEL_UNAVAILABLE" ||
+            aiError.code === "AI_INVALID_RESPONSE");
 
         if (!worthRetrying || attempt === 1) break;
 
@@ -468,11 +474,14 @@ export async function completeValidated<T>(
     return { data, completion, repaired: false };
   }
 
-  // One repair attempt. Free-tier friendly: this happens rarely.
+  // One repair attempt. Free-tier friendly: this happens rarely. The cap must
+  // stay above the largest stage budget (assessment 6_144): capping lower than
+  // the original request guarantees the repair truncates exactly like the
+  // response it is trying to fix.
   const repaired = await complete({
     ...options,
     temperature: 0,
-    maxTokens: Math.min((options.maxTokens ?? MAX_TOKENS) + 512, 4_096),
+    maxTokens: Math.min((options.maxTokens ?? MAX_TOKENS) + 512, 8_192),
     system: `${options.system}\n\nYour previous response could not be parsed: ${first.issueSummary}. Return valid JSON only.`,
     user: `Your previous response was:
 

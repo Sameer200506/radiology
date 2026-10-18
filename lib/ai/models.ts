@@ -215,7 +215,12 @@ export const MAX_TOKENS = Number(
  */
 export const STAGE_MAX_TOKENS: Record<string, number> = {
   intake: 1_024,
-  questions: 1_536,
+  // Questions must fit the model's reasoning overhead plus 3-8 questions with
+  // rationales. Thinking models (Gemini 3.x) spend tokens on internal reasoning
+  // inside the same maxOutputTokens budget — 1_536 truncated real answers
+  // mid-JSON (finishReason=MAX_TOKENS, verified live), which the transport
+  // deliberately rejects instead of showing partial data.
+  questions: 6_144,
   document: 2_048,
   imaging: 2_048,
   assessment: 6_144,
