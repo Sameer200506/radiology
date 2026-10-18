@@ -81,8 +81,8 @@ describe("provider selection", () => {
 
   it("builds gemini chain from the gemini env vars", () => {
     resetEnv({ GEMINI_API_KEY: "k" });
-    expect(primaryModel()).toBe("gemini-2.5-flash");
-    expect(modelChain()).toEqual(["gemini-2.5-flash", "gemini-2.0-flash"]);
+    expect(primaryModel()).toBe("gemini-3.8-flash");
+    expect(modelChain()).toEqual(["gemini-3.8-flash", "gemini-flash-latest"]);
   });
 
   it("treats a configured OpenRouter auto model as not vision-capable", () => {
@@ -92,7 +92,7 @@ describe("provider selection", () => {
 
   it("treats the gemini primary as vision-capable automatically", () => {
     resetEnv({ GEMINI_API_KEY: "k" });
-    expect(visionModel()).toBe("gemini-2.5-flash");
+    expect(visionModel()).toBe("gemini-3.8-flash");
   });
 });
 
@@ -104,16 +104,16 @@ describe("callGemini", () => {
       new Response(geminiBody('{"ok":true}'), { status: 200 }),
     );
 
-    const result = await callGemini("gemini-2.5-flash", options, 5_000);
+    const result = await callGemini("gemini-3.8-flash", options, 5_000);
 
     expect(result.text).toBe('{"ok":true}');
-    expect(result.model).toBe("gemini-2.5-flash");
+    expect(result.model).toBe("gemini-3.8-flash");
     expect(result.usedFallback).toBe(false);
     expect(result.usage).toEqual({ promptTokens: 11, completionTokens: 22 });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
     );
     const body = JSON.parse(String(init.body)) as {
       contents: Array<{ parts: Array<{ text?: string }> }>;
@@ -128,14 +128,14 @@ describe("callGemini", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { code: 429, message: "Resource exhausted" } }), { status: 429 }),
     );
-    const error = await errorFrom(callGemini("gemini-2.5-flash", options, 5_000));
+    const error = await errorFrom(callGemini("gemini-3.8-flash", options, 5_000));
     expect(error.code).toBe("AI_RATE_LIMITED");
     expect(error.retryable).toBe(true);
   });
 
   it("maps 403 to a non-retryable configuration error", async () => {
     fetchMock.mockResolvedValueOnce(new Response("forbidden", { status: 403 }));
-    const error = await errorFrom(callGemini("gemini-2.5-flash", options, 5_000));
+    const error = await errorFrom(callGemini("gemini-3.8-flash", options, 5_000));
     expect(error.code).toBe("AI_NOT_CONFIGURED");
     expect(error.retryable).toBe(false);
   });
@@ -144,14 +144,14 @@ describe("callGemini", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { code: 404, message: "model not found" } }), { status: 404 }),
     );
-    const error = await errorFrom(callGemini("gemini-2.5-flash", options, 5_000));
+    const error = await errorFrom(callGemini("gemini-3.8-flash", options, 5_000));
     expect(error.code).toBe("AI_MODEL_UNAVAILABLE");
     expect(error.retryable).toBe(true);
   });
 
   it("throws AI_NOT_CONFIGURED without spending a request when the key is missing", async () => {
     resetEnv();
-    const error = await errorFrom(callGemini("gemini-2.5-flash", options, 5_000));
+    const error = await errorFrom(callGemini("gemini-3.8-flash", options, 5_000));
     expect(error.code).toBe("AI_NOT_CONFIGURED");
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -163,14 +163,14 @@ describe("callGemini", () => {
         { status: 200 },
       ),
     );
-    const error = await errorFrom(callGemini("gemini-2.5-flash", options, 5_000));
+    const error = await errorFrom(callGemini("gemini-3.8-flash", options, 5_000));
     expect(error.code).toBe("AI_INVALID_RESPONSE");
     expect(error.message).toMatch(/declined/i);
   });
 
   it("rejects a MAX_TOKENS truncation with a token cut-off error", async () => {
     fetchMock.mockResolvedValueOnce(new Response(geminiBody('{"half":', "MAX_TOKENS"), { status: 200 }));
-    const error = await errorFrom(callGemini("gemini-2.5-flash", options, 5_000));
+    const error = await errorFrom(callGemini("gemini-3.8-flash", options, 5_000));
     expect(error.code).toBe("AI_INVALID_RESPONSE");
     expect(error.message).toMatch(/cut off/i);
   });
@@ -186,7 +186,7 @@ describe("callGemini", () => {
       }),
     );
     const error = await errorFrom(
-      callGemini("gemini-2.5-flash", { ...options, signal: controller.signal }, 5_000),
+      callGemini("gemini-3.8-flash", { ...options, signal: controller.signal }, 5_000),
     );
     expect(error.code).toBe("AI_TIMEOUT");
   });
@@ -201,6 +201,6 @@ describe("complete() dispatch", () => {
     expect(result.text).toBe('{"value":7}');
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("generativelanguage.googleapis.com");
-    expect(url).toContain("gemini-2.5-flash");
+    expect(url).toContain("gemini-3.8-flash");
   });
 });

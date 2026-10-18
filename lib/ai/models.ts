@@ -15,7 +15,7 @@
  *   - **Google Gemini**: `GEMINI_API_KEY`. Takes precedence when set — that is
  *     what makes the AI work on networks where openrouter.ai is unreachable,
  *     while Vercel deployments can keep using OpenRouter. Model ids are the
- *     plain `generativelanguage.googleapis.com` names, e.g. `gemini-2.5-flash`.
+ *     plain `generativelanguage.googleapis.com` names, e.g. `gemini-3.8-flash`.
  *
  * `lib/ai/openrouter.ts` remains the single transport entrypoint and dispatches
  * to `lib/ai/gemini.ts` when Gemini is active.
@@ -49,8 +49,8 @@ export interface ModelDescriptor {
 
 export const DEFAULT_MODEL = "auto";
 export const DEFAULT_FALLBACK_MODEL = "auto";
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-export const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-2.0-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+export const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-flash-latest";
 
 /**
  * Models we know about. This is metadata only — it drives capability detection
@@ -71,15 +71,27 @@ export const KNOWN_MODELS: Record<string, ModelDescriptor> = {
     capabilities: ["text", "vision", "json"],
     freeTier: false,
   },
+  "gemini-3.8-flash": {
+    id: "gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
+    capabilities: ["text", "vision", "json"],
+    freeTier: true,
+  },
+  "gemini-flash-latest": {
+    id: "gemini-flash-latest",
+    label: "Gemini Flash Latest",
+    capabilities: ["text", "vision", "json"],
+    freeTier: true,
+  },
   "gemini-2.5-flash": {
     id: "gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
+    label: "Gemini 2.5 Flash (retired)",
     capabilities: ["text", "vision", "json"],
     freeTier: true,
   },
   "gemini-2.0-flash": {
     id: "gemini-2.0-flash",
-    label: "Gemini 2.0 Flash",
+    label: "Gemini 2.0 Flash (retired)",
     capabilities: ["text", "vision", "json"],
     freeTier: true,
   },

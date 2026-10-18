@@ -230,7 +230,7 @@ The app ships with two interchangeable AI providers — **either key is enough**
 - **Google Gemini**: <https://aistudio.google.com/apikey> → **Create API key** (free tier is fine).
   Reachable wherever Google is. **If openrouter.ai is blocked on your network, use this.** When
   `GEMINI_API_KEY` is set it takes precedence, and the app uses plain Gemini model ids such as
-  `gemini-2.5-flash`.
+  `gemini-3.8-flash`.
 
 Copy the chosen key into the matching variable in `.env.local`. It is a **server-only** secret:
 never prefix it with `NEXT_PUBLIC_`, and never reference it from a client component.
@@ -333,8 +333,8 @@ deployment capabilities panel reports AI and image analysis correctly.
 | `OPENROUTER_TIMEOUT_MS` | Optional. Default `45000` | Server only |
 | `OPENROUTER_MAX_TOKENS` | Optional. Default `2048` | Server only |
 | `GEMINI_API_KEY` | <https://aistudio.google.com/apikey> — takes precedence when set | **Server only** |
-| `GEMINI_MODEL` | Configuration. Default `gemini-2.5-flash` | Server only |
-| `GEMINI_FALLBACK_MODEL` | Configuration. Default `gemini-2.0-flash` | Server only |
+| `GEMINI_MODEL` | Configuration. Default `gemini-3.8-flash` | Server only |
+| `GEMINI_FALLBACK_MODEL` | Configuration. Default `gemini-flash-latest` | Server only |
 | `GEMINI_IMAGE_MODEL` | Optional vision override | Server only |
 | `GEMINI_TIMEOUT_MS` / `GEMINI_MAX_TOKENS` | Optional. Provider-scoped tuning | Server only |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase console → Service accounts | **Server only** |
