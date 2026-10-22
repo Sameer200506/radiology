@@ -220,6 +220,34 @@ curl "https://firestore.googleapis.com/v1/projects/PROJECT_ID/databases/(default
 `404 … The database (default) does not exist for project …` means step 3 above was never done for
 the project id in `.env.local`. All Firestore writes will hang until the database is created.
 
+> **The missing-bucket trap.** Steps 3 and 4 fail in different ways, and only one
+> of them is loud. With no Firestore database the reads never answer. With no
+> Storage bucket, Firestore keeps working and the wizard looks healthy until the
+> **first upload**, which fails in about a second with
+> `Firebase Storage: An unknown error occurred … (storage/unknown)` — a message
+> that names nothing. The app probes the bucket before uploading and now shows
+> the actual fix instead, but the check by hand is:
+>
+> ```bash
+> curl -s "https://firebasestorage.googleapis.com/v0/b/YOUR_STORAGE_BUCKET/o"
+> ```
+>
+> `{"error":{"code":404,"message":"Not Found."}}` means the bucket in
+> `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` was never created. An existing bucket
+> answers from the rules engine instead (`Permission denied.` or
+> `Listing objects in a bucket is disallowed …`). Fix by opening
+> **Build → Storage → Get started** in the Firebase console — the same location
+> as Firestore — and then deploy the rules (4.5).
+
+> **Skipping Storage entirely for local testing.** Blaze is required to create a
+> bucket, which is a lot of setup for trying the wizard on your own machine. Set
+> `STORAGE_DRIVER=local` in `.env.local` and uploads are written to
+> `.local-storage/` (gitignored) on the machine running the app, served back
+> through `/api/storage/files` with the same session and ownership checks as
+> production. Firestore metadata, analysis and reports are unchanged. Leave the
+> variable empty to use real Firebase Storage; never set it on a deployment,
+> where the filesystem is not durable.
+
 ### 4.3 Get an AI provider key
 
 The app ships with two interchangeable AI providers — **either key is enough**:

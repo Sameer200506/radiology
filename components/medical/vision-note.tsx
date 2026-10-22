@@ -79,4 +79,19 @@ export function useCapabilities(): AiCapabilities {
   return capabilities;
 }
 
+/**
+ * Warms the capabilities cache without subscribing.
+ *
+ * `isVisionAnalysisAvailableHint()` reads the module cache synchronously, so
+ * any page that only calls the hint (e.g. the documents step) would show the
+ * stale `false` default forever unless something warms the cache first. Call
+ * this from a `useEffect` on such pages so the hint flips to the truth once
+ * the server answers.
+ */
+export function useWarmCapabilities(): void {
+  React.useEffect(() => {
+    void fetchCapabilities();
+  }, []);
+}
+
 export { FALLBACK as DEFAULT_CAPABILITIES };

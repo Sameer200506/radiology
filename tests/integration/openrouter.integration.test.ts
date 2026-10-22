@@ -18,10 +18,11 @@ import {
   reconcileUrgency,
   runAssessment,
   runDocumentAnalysis,
+  runImagingAnalysis,
   runIntake,
   runQuestions,
 } from "@/lib/ai/stages";
-import { isAiConfigured, isVisionAnalysisAvailable, modelChain, primaryModel } from "@/lib/ai/models";
+import { describeModel, isAiConfigured, isVisionAnalysisAvailable, modelChain, primaryModel } from "@/lib/ai/models";
 import { evaluateRedFlags } from "@/lib/medical/triage";
 import { buildDemoCase } from "@/lib/medical/demo-data";
 import type { MedicalCase } from "@/types/medical";
@@ -62,13 +63,29 @@ describe.skipIf(!hasKey)("live OpenRouter", () => {
     expect(primaryModel()).toBeTruthy();
   });
 
-  it("correctly reports that image analysis is unavailable when no vision model is pinned", () => {
-    // With `auto`, OpenRouter may or may not route to a vision model, so the app
-    // must not claim it can look at images. This asserts the honest default.
-    if (!process.env.OPENROUTER_IMAGE_MODEL) {
-      expect(isVisionAnalysisAvailable()).toBe(false);
-    }
-  });
+  it("correctly reports image analysis availability, and a positive claim is backed by a live call", async () => {
+    // Availability must follow configuration exactly: an explicitly pinned
+    // image model the registry knows about, or a primary model that can see.
+    // `auto` must never be treated as vision-capable.
+    const pinned = process.env.OPENROUTER_IMAGE_MODEL?.trim();
+    const pinnedVision = Boolean(pinned) && describeModel(pinned as string).capabilities.includes("vision");
+    const primary = primaryModel();
+    const primaryVision = primary !== "auto" && describeModel(primary).capabilities.includes("vision");
+    expect(isVisionAnalysisAvailable()).toBe(pinnedVision || primaryVision);
+
+    // Claiming vision is only honest if images actually go through the
+    // pipeline: send the smallest possible image, in production shape.
+    if (!isVisionAnalysisAvailable()) return;
+    const result = await runImagingAnalysis({
+      fileName: "probe.png",
+      mimeType: "image/png",
+      // 1x1 red PNG.
+      base64:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    });
+    expect(result.mode).toBe("model_vision");
+    console.log(`      [imaging] mode=${result.mode}`);
+  }, 120_000);
 
   it("stage 1 — intake returns a schema-valid structured extraction", async () => {
     const caseData = smallCase();

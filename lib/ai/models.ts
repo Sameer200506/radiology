@@ -119,6 +119,22 @@ export const KNOWN_MODELS: Record<string, ModelDescriptor> = {
     capabilities: ["text", "json"],
     freeTier: true,
   },
+  // Free-tier models verified live on 2026-10-18 through the OpenRouter free
+  // tier: the VL variant answered both text and image requests with valid JSON;
+  // the Ultra variant answered text requests in under a second and serves as
+  // the fallback.
+  "nvidia/nemotron-3.5-super-vl:free": {
+    id: "nvidia/nemotron-3.5-super-vl:free",
+    label: "Nemotron 3.5 Super VL (free)",
+    capabilities: ["text", "vision", "json"],
+    freeTier: true,
+  },
+  "nvidia/nemotron-3-ultra-550b-a55b:free": {
+    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    label: "Nemotron 3 Ultra 550B (free)",
+    capabilities: ["text", "json"],
+    freeTier: true,
+  },
 };
 
 export function primaryModel(): string {

@@ -63,7 +63,15 @@ import {
 } from "firebase/storage";
 
 import { requireFirebase } from "@/lib/firebase/client";
+import { describeStorageFailure } from "@/lib/firebase/storage-diagnostics";
+import { assertStorageBucketExists, storageBucketName } from "@/lib/firebase/storage-health";
 import { buildStoragePath, isSafeIdSegment } from "@/lib/security/access";
+import {
+  deleteLocalStoredFile,
+  resolveStorageDriver,
+  storageFileUrl,
+  uploadLocalFile,
+} from "@/lib/storage/driver-client";
 import type { AssessmentSummary, ReportRecord, StoredAnalysis, UserProfile } from "@/types/assessment";
 import type { AssessmentDoc, Paged, UploadRecord } from "@/types/firebase";
 import type { DocumentKind } from "@/types/medical";
@@ -122,6 +130,12 @@ const UPLOAD_TIMEOUT_MS = 120_000;
  * The underlying operation is not cancelled: if it completes after the timer,
  * a retry may find the record already created. That record stays visible on
  * the dashboard, which is far better than an app that cannot report failure.
+ *
+ * Because the SDK retries on any error it cannot attribute, this message is
+ * also what a *permanent* misconfiguration looks like when it is not caught
+ * first: a missing Firestore database, or a missing Storage bucket (handled by
+ * assertStorageBucketExists in uploadFile below). Both are named so the hint is
+ * still true when the connection is not the problem.
  */
 async function withNetworkTimeout<T>(
   operation: Promise<T>,
@@ -133,7 +147,7 @@ async function withNetworkTimeout<T>(
     timer = setTimeout(() => {
       reject(
         new Error(
-          `${action} is taking too long. Check your connection and try again. If this keeps happening, the Firebase project may be missing its Cloud Firestore database (README section 4.2 → "Create database").`,
+          `${action} is taking too long. Check your connection and try again. If this keeps happening, the Firebase project may be missing its Cloud Firestore database or its Cloud Storage bucket (README section 4.2).`,
         ),
       );
     }, timeoutMs);
@@ -268,10 +282,15 @@ export async function deleteUserAccount(): Promise<void> {
   const uid = requireUid();
 
   // 1. Uploaded files, so Storage does not keep orphans.
+  const driver = await resolveStorageDriver();
   const owned = await listAllAssessments(uid);
   for (const assessment of owned) {
     for (const upload of await listUploads(uid, assessment.id)) {
-      await deleteObject(storageRef(storage, upload.storagePath)).catch(() => undefined);
+      if (driver === "local") {
+        await deleteLocalStoredFile(upload.storagePath).catch(() => undefined);
+      } else {
+        await deleteObject(storageRef(storage, upload.storagePath)).catch(() => undefined);
+      }
     }
   }
 
@@ -554,6 +573,8 @@ export async function uploadFile(
   const assessment = await getAssessment(userId, assessmentId);
   if (!assessment) throw new Error("Assessment not found.");
 
+  const driver = await resolveStorageDriver();
+
   const id = newId();
   const extension = /\.[A-Za-z0-9]{1,10}$/.exec(params.fileName)?.[0].toLowerCase() ?? ".bin";
   const storagePath = buildStoragePath({
@@ -563,28 +584,51 @@ export async function uploadFile(
     extension,
   });
 
-  const task: UploadTask = uploadBytesResumable(
-    storageRef(storage, storagePath),
-    params.file,
-    {
-      contentType: params.mimeType,
-      // storage.rules rejects anything that is not explicitly private.
-      customMetadata: { cacheControl: "private, max-age=0, no-store" },
-    },
-  );
+  if (driver === "local") {
+    // Development mode (STORAGE_DRIVER=local): bytes go to this machine's disk
+    // through /api/storage/files, so no Firebase bucket is required. The
+    // record below still lands in Firestore, exactly like production.
+    await withNetworkTimeout(
+      uploadLocalFile(storagePath, params.file, params.mimeType),
+      "Uploading this document",
+      UPLOAD_TIMEOUT_MS,
+    );
+  } else {
+    // A bucket that was never created (README 4.2, step 4) fails every upload
+    // with an anonymous "unknown error". Check once, up front, so the person gets
+    // the fix instead of that message.
+    await assertStorageBucketExists();
 
-  await withNetworkTimeout(
-    new Promise<void>((resolve, reject) => {
-      task.on(
-        "state_changed",
-        () => undefined,
-        (error) => reject(error),
-        () => resolve(),
+    const task: UploadTask = uploadBytesResumable(
+      storageRef(storage, storagePath),
+      params.file,
+      {
+        contentType: params.mimeType,
+        // storage.rules rejects anything that is not explicitly private.
+        customMetadata: { cacheControl: "private, max-age=0, no-store" },
+      },
+    );
+
+    try {
+      await withNetworkTimeout(
+        new Promise<void>((resolve, reject) => {
+          task.on(
+            "state_changed",
+            () => undefined,
+            (error) => reject(error),
+            () => resolve(),
+          );
+        }),
+        "Uploading this document",
+        UPLOAD_TIMEOUT_MS,
       );
-    }),
-    "Uploading this document",
-    UPLOAD_TIMEOUT_MS,
-  );
+    } catch (uploadError) {
+      // The SDK's own messages ("An unknown error occurred") name nothing. When
+      // the cause is a missing bucket or undeployed rules, say so instead.
+      const explanation = describeStorageFailure(uploadError, storageBucketName());
+      throw explanation ? new Error(explanation) : uploadError;
+    }
+  }
 
   const now = nowIso();
   const record: UploadRecord = {
@@ -620,12 +664,15 @@ export async function uploadFile(
 
   let previewUrl: string | null = null;
   if (params.mimeType.startsWith("image/")) {
-    // The signed read rule allows this for the owner only.
-    previewUrl = await withNetworkTimeout(
-      getDownloadURL(storageRef(storage, storagePath)).catch(() => null),
-      "Loading this document preview",
-      READ_TIMEOUT_MS,
-    );
+    previewUrl =
+      driver === "local"
+        ? storageFileUrl(storagePath)
+        : await withNetworkTimeout(
+            // The signed read rule allows this for the owner only.
+            getDownloadURL(storageRef(storage, storagePath)).catch(() => null),
+            "Loading this document preview",
+            READ_TIMEOUT_MS,
+          );
   }
 
   return { record, previewUrl };
@@ -692,7 +739,11 @@ export async function deleteUpload(
   const record = snapshot.data() as UploadRecord;
   if (record.userId !== userId) return;
 
-  await deleteObject(storageRef(storage, record.storagePath)).catch(() => undefined);
+  if ((await resolveStorageDriver()) === "local") {
+    await deleteLocalStoredFile(record.storagePath).catch(() => undefined);
+  } else {
+    await deleteObject(storageRef(storage, record.storagePath)).catch(() => undefined);
+  }
   await withNetworkTimeout(
     deleteDoc(doc(db, COLLECTIONS.assessments, assessmentId, COLLECTIONS.uploads, uploadId)),
     "Removing this document",
