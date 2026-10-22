@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SwitchField } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -143,7 +145,7 @@ await updateUserProfile({ settings: patch as unknown as UserSettings });
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-line bg-surface/50 p-4">
+          <div className="rounded-2xl border border-line/80 bg-surface/35 p-4 backdrop-blur-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">
               AI analysis
             </p>
@@ -160,7 +162,7 @@ await updateUserProfile({ settings: patch as unknown as UserSettings });
             </p>
           </div>
 
-          <div className="rounded-2xl border border-line bg-surface/50 p-4">
+          <div className="rounded-2xl border border-line/80 bg-surface/35 p-4 backdrop-blur-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">
               Image analysis
             </p>
@@ -198,7 +200,7 @@ await updateUserProfile({ settings: patch as unknown as UserSettings });
         {rulesOpen ? (
           <ul className="mt-5 space-y-3">
             {ruleSet.map((rule) => (
-              <li key={rule.id} className="rounded-xl border border-line bg-surface/50 p-3.5">
+              <li key={rule.id} className="rounded-xl border border-line/80 bg-surface/35 p-3.5 backdrop-blur-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-medium text-ink">{rule.label}</p>
                   <Badge
@@ -262,15 +264,15 @@ await updateUserProfile({ settings: patch as unknown as UserSettings });
           </DialogHeader>
 
           <div className="mt-5 space-y-2">
-            <label htmlFor="delete-confirm" className="text-sm font-medium text-ink">
+            <Label htmlFor="delete-confirm">
               Type <span className="font-mono font-semibold">DELETE</span> to confirm
-            </label>
-            <input
+            </Label>
+            <Input
               id="delete-confirm"
               value={deleteConfirm}
               onChange={(event) => setDeleteConfirm(event.target.value)}
               autoComplete="off"
-              className="h-11 w-full rounded-xl border border-line bg-surface/70 px-3.5 text-sm text-ink focus:border-critical focus:outline-none focus:ring-4 focus:ring-critical/12"
+              className="border-critical/40 focus:border-critical focus:ring-critical/12"
             />
           </div>
 

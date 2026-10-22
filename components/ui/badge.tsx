@@ -6,17 +6,17 @@ import { urgencyPresentation } from "@/lib/medical/urgency";
 import type { UrgencyLevel } from "@/types/medical";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.08em]",
+  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] backdrop-blur-md",
   {
     variants: {
       tone: {
-        neutral: "bg-muted/10 text-muted border-line",
-        brand: "bg-brand/12 text-brand border-brand/25",
-        info: "bg-info/12 text-info border-info/25",
-        caution: "bg-caution/12 text-caution border-caution/30",
-        critical: "bg-critical/12 text-critical border-critical/35",
-        good: "bg-good/12 text-good border-good/25",
-        accent: "bg-accent/12 text-accent border-accent/25",
+        neutral: "border-line/90 bg-surface/45 text-muted",
+        brand: "border-brand/25 bg-brand/10 text-brand",
+        info: "border-info/25 bg-info/10 text-info",
+        caution: "border-caution/30 bg-caution/10 text-caution",
+        critical: "border-critical/30 bg-critical/10 text-critical",
+        good: "border-good/25 bg-good/10 text-good",
+        accent: "border-accent/25 bg-accent/10 text-accent",
       },
       size: {
         sm: "px-2 py-0.5 text-[0.625rem]",
@@ -57,7 +57,7 @@ export function UrgencyBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border font-semibold uppercase tracking-[0.08em]",
+        "inline-flex items-center gap-1.5 rounded-full border font-semibold uppercase tracking-[0.08em] backdrop-blur-md",
         presentation.chipClass,
         size === "lg" ? "px-3.5 py-1.5 text-xs" : "px-2.5 py-1 text-[0.6875rem]",
         className,

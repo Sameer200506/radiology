@@ -42,10 +42,10 @@ export function EmergencyBanner({
     `Based on what you have described, the urgency level is ${presentation.label}. ${presentation.description}`;
 
   const tone = isEmergency
-    ? "border-critical/45 bg-critical/10"
+    ? "border-critical/45 bg-critical/10 backdrop-blur-xl shadow-[0_24px_60px_-32px_hsl(var(--critical)/0.55)]"
     : isUrgent
-      ? "border-caution/45 bg-caution/10"
-      : "border-caution/30 bg-caution-soft/40";
+      ? "border-caution/45 bg-caution/10 backdrop-blur-xl shadow-[0_24px_60px_-32px_hsl(var(--caution)/0.45)]"
+      : "border-caution/30 bg-caution-soft/40 backdrop-blur-xl";
 
   const Icon = isEmergency ? AlertOctagon : ShieldAlert;
   const iconTone = isEmergency ? "bg-critical/15 text-critical" : "bg-caution/15 text-caution";

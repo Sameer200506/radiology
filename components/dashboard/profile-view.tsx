@@ -6,8 +6,17 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/components/auth/auth-provider";
 import { errorMessage } from "@/lib/api/client";
 import { ensureUserProfile, getUserProfile, updateUserProfile } from "@/lib/data";
@@ -28,8 +37,7 @@ interface Profile {
   };
 }
 
-export function ProfileView() {
-  const { user, ready } = useAuth();
+export function ProfileView() {  const { user, ready } = useAuth();
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [displayName, setDisplayName] = React.useState("");
   const [defaultAge, setDefaultAge] = React.useState("");
@@ -137,20 +145,22 @@ export function ProfileView() {
         </p>
       </header>
 
-      <Card variant="glass" padding="md">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-accent text-white">
-            {profile?.photoURL || user?.photoURL ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profile?.photoURL ?? user?.photoURL ?? ""}
-                alt=""
-                className="size-14 rounded-2xl object-cover"
-              />
-            ) : (
-              <User className="size-6" aria-hidden="true" />
-            )}
-          </span>
+      <Card variant="glass" padding="md" className="relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 -top-24 h-40 bg-[radial-gradient(60%_100%_at_30%_100%,hsl(var(--brand)/0.18),transparent_70%)]"
+        />
+        <div className="relative flex flex-wrap items-center gap-4">
+          <Avatar className="size-14 rounded-2xl">
+            <AvatarImage src={profile?.photoURL ?? user?.photoURL ?? undefined} alt="" />
+            <AvatarFallback className="rounded-2xl text-base">
+              {profile?.displayName ? (
+                initials(profile.displayName)
+              ) : (
+                <User className="size-6" aria-hidden="true" />
+              )}
+            </AvatarFallback>
+          </Avatar>
           <div className="min-w-0">
             <p className="text-base font-medium text-ink">{profile?.displayName ?? "MedAssist user"}</p>
             <p className="text-sm text-muted">{profile?.email ?? user?.email ?? ""}</p>
@@ -178,9 +188,7 @@ export function ProfileView() {
 
         <form onSubmit={save} className="mt-5 space-y-5">
           <div className="space-y-1.5">
-            <label htmlFor="displayName" className="text-sm font-medium text-ink">
-              Display name
-            </label>
+            <Label htmlFor="displayName">Display name</Label>
             <Input
               id="displayName"
               value={displayName}
@@ -192,9 +200,7 @@ export function ProfileView() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="defaultAge" className="text-sm font-medium text-ink">
-                Default age
-              </label>
+              <Label htmlFor="defaultAge">Default age</Label>
               <Input
                 id="defaultAge"
                 type="number"
@@ -208,26 +214,30 @@ export function ProfileView() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="defaultSex" className="text-sm font-medium text-ink">
-                Default sex
-              </label>
-              <select
-                id="defaultSex"
-                value={defaultSex}
-                onChange={(event) => setDefaultSex(event.target.value)}
-                className="h-11 w-full rounded-xl border border-line bg-surface/70 px-3.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12"
+              <Label htmlFor="defaultSex">Default sex</Label>
+              <Select
+                value={defaultSex || "none"}
+                onValueChange={(value) => setDefaultSex(value === "none" ? "" : value)}
               >
-                <option value="">Not set</option>
-                <option value="female">Female</option>
-                <option value="male">Male</option>
-                <option value="intersex">Intersex</option>
-                <option value="prefer_not_to_say">Prefer not to say</option>
-              </select>
+                <SelectTrigger id="defaultSex" aria-label="Default sex">
+                  <SelectValue placeholder="Not set" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not set</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="intersex">Intersex</SelectItem>
+                  <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           {error ? (
-            <p role="alert" className="text-sm text-critical">
+            <p
+              role="alert"
+              className="rounded-xl border border-critical/30 bg-critical/8 px-3.5 py-2.5 text-sm text-critical"
+            >
               {error}
             </p>
           ) : null}
@@ -250,4 +260,13 @@ export function ProfileView() {
       </Card>
     </div>
   );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }

@@ -3,11 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, ArrowLeft, Check, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, ClipboardList, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 
-import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/components/auth/auth-provider";
 import { isFirebaseConfigured, missingFirebaseEnvKeys } from "@/lib/firebase/client";
@@ -25,33 +27,102 @@ export function AuthCard({
   footer?: React.ReactNode;
 }) {
   return (
-    <div className="relative flex min-h-dvh items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="mb-8 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5" aria-label="MedAssist AI home">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-accent text-white shadow-lg">
-              <ActivityMark />
-            </span>
-            <span className="text-[0.9375rem] font-semibold tracking-tight text-ink">MedAssist AI</span>
-          </Link>
-          <ThemeToggle />
-        </div>
+    <div className="relative flex min-h-dvh flex-col px-4 py-6 sm:px-6 sm:py-10">
+      <header className="mx-auto flex w-full max-w-5xl items-center justify-between">
+        <Link href="/" className="flex items-center gap-2.5" aria-label="MedAssist AI home">
+          <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-accent text-white shadow-[0_10px_24px_-10px_hsl(var(--brand)/0.8)]">
+            <ActivityMark />
+          </span>
+          <span className="text-[0.9375rem] font-semibold tracking-tight text-ink">MedAssist AI</span>
+        </Link>
+        <ThemeToggle compact />
+      </header>
 
-        <div className="glass-strong rounded-3xl p-6 sm:p-8">
-          <h1 className="text-xl font-semibold tracking-tight text-ink">{title}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted">{subtitle}</p>
-          <div className="mt-7">{children}</div>
-          {footer ? <div className="mt-7 border-t border-line pt-6">{footer}</div> : null}
-        </div>
+      <div className="mx-auto flex w-full max-w-5xl flex-1 items-center py-8 sm:py-10">
+        <div className="glass-strong grid w-full overflow-hidden rounded-[2rem] shadow-[var(--shadow-float)] lg:grid-cols-[1.05fr_1fr]">
+          {/* Brand / value panel */}
+          <aside className="relative hidden overflow-hidden border-r border-white/40 p-9 lg:flex lg:flex-col dark:border-white/5">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-[radial-gradient(120%_120%_at_0%_0%,hsl(var(--brand)/0.2),transparent_55%),radial-gradient(120%_120%_at_100%_100%,hsl(var(--accent)/0.18),transparent_55%)]"
+            />
+            <div aria-hidden="true" className="absolute -right-16 top-10 size-56 rounded-full bg-brand/20 blur-3xl motion-safe:animate-drift" />
+            <div aria-hidden="true" className="absolute -bottom-20 -left-10 size-64 rounded-full bg-accent/20 blur-3xl motion-safe:animate-drift-slow" />
 
-        <p className="mt-6 text-center text-xs leading-relaxed text-subtle">
-          By continuing you accept that this is an educational tool and not a medical service.{" "}
-          <Link href="/disclaimer" className="underline underline-offset-4 hover:text-ink">
-            Read the disclaimer
-          </Link>
-          .
-        </p>
+            <div className="relative flex flex-1 flex-col">
+              <Badge tone="brand" className="w-fit gap-1.5">
+                <Sparkles className="size-3" aria-hidden="true" />
+                Clinical reasoning workspace
+              </Badge>
+
+              <h2 className="mt-7 text-[1.75rem] font-semibold leading-[1.15] tracking-tight text-ink">
+                From first symptom to a structured report.
+              </h2>
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted">
+                Guided history-taking, document review and an educational differential — kept
+                private to your account.
+              </p>
+
+              <ul className="mt-8 space-y-4">
+                {[
+                  {
+                    icon: ShieldCheck,
+                    title: "Private by default",
+                    body: "Assessments and uploads are scoped to your signed-in account.",
+                  },
+                  {
+                    icon: ClipboardList,
+                    title: "Built for clinical structure",
+                    body: "Symptoms, history and imaging findings in one reviewable flow.",
+                  },
+                  {
+                    icon: Sparkles,
+                    title: "AI as a second reader",
+                    body: "Suggestions are educational, cited and never a diagnosis.",
+                  },
+                ].map((item) => (
+                  <li key={item.title} className="flex gap-3.5">
+                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/50 bg-surface/60 text-brand shadow-sm backdrop-blur dark:border-white/10">
+                      <item.icon className="size-4" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-ink">{item.title}</p>
+                      <p className="mt-0.5 text-[0.8125rem] leading-relaxed text-muted">{item.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-auto pt-10">
+                <p className="text-[0.6875rem] uppercase tracking-[0.14em] text-subtle">
+                  Educational use only
+                </p>
+              </div>
+            </div>
+          </aside>
+
+          {/* Form panel */}
+          <div className="p-6 sm:p-9">
+            <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{title}</h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted">{subtitle}</p>
+            <div className="mt-7">{children}</div>
+            {footer ? (
+              <>
+                <Separator className="mt-7" />
+                <div className="mt-6">{footer}</div>
+              </>
+            ) : null}
+          </div>
+        </div>
       </div>
+
+      <p className="mx-auto max-w-md text-center text-xs leading-relaxed text-subtle">
+        By continuing you accept that this is an educational tool and not a medical service.{" "}
+        <Link href="/disclaimer" className="underline underline-offset-4 hover:text-ink">
+          Read the disclaimer
+        </Link>
+        .
+      </p>
     </div>
   );
 }
@@ -291,22 +362,19 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <p
           role="status"
           aria-live="polite"
-          className="flex items-center gap-2 rounded-xl border border-line bg-surface/70 px-3.5 py-3 text-sm text-muted"
+          className="glass flex items-center gap-2 rounded-xl px-3.5 py-3 text-sm text-muted"
         >
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           Completing sign-in…
         </p>
       ) : null}
 
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        block
         onClick={runGoogle}
         disabled={formDisabled}
-        className={cn(
-          "flex h-11 w-full items-center justify-center gap-3 rounded-full border border-line bg-surface/70 text-sm font-medium text-ink transition-colors",
-          "hover:border-brand/40 hover:bg-brand/5 disabled:cursor-not-allowed disabled:opacity-60",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
-        )}
       >
         {busy === "google" || completing ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -314,19 +382,17 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           <GoogleMark />
         )}
         Continue with Google
-      </button>
+      </Button>
 
-      <div className="flex items-center gap-3" aria-hidden="true">
-        <span className="h-px flex-1 bg-line" />
-        <span className="text-xs uppercase tracking-[0.1em] text-subtle">or</span>
-        <span className="h-px flex-1 bg-line" />
+      <div className="flex items-center gap-3">
+        <Separator className="flex-1" />
+        <span className="text-[0.6875rem] uppercase tracking-[0.14em] text-subtle">or</span>
+        <Separator className="flex-1" />
       </div>
 
       {mode === "signup" ? (
         <div className="space-y-1.5">
-          <label htmlFor="displayName" className="text-sm font-medium text-ink">
-            Name
-          </label>
+          <Label htmlFor="displayName">Name</Label>
           <Input
             id="displayName"
             name="name"
@@ -341,9 +407,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       ) : null}
 
       <div className="space-y-1.5">
-        <label htmlFor="email" className="text-sm font-medium text-ink">
-          Email address
-        </label>
+        <Label htmlFor="email">Email address</Label>
         <Input
           id="email"
           name="email"
@@ -363,9 +427,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between gap-3">
-          <label htmlFor="password" className="text-sm font-medium text-ink">
-            Password
-          </label>
+          <Label htmlFor="password">Password</Label>
           {mode === "login" ? (
             <Link
               href="/forgot-password"

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ShieldCheck } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -86,19 +87,61 @@ const SECTIONS = [
 
 export default function PrivacyPage() {
   return (
-    <main id="main-content" className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6">
-      <p className="eyebrow">Legal and technical</p>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">Privacy</h1>
-      <p className="mt-4 text-pretty text-base leading-relaxed text-muted">
-        Plainly: what is stored, where, what is transmitted to a third party, and what this
-        deployment does not promise.
-      </p>
+    <main id="main-content" className="mx-auto w-full max-w-3xl px-4 py-14 sm:px-6 sm:py-20">
+      <header className="glass relative overflow-hidden rounded-[2rem] p-6 sm:p-9">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-20 -top-24 size-60 rounded-full bg-brand/15 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-accent/12 blur-3xl"
+        />
+        <span className="relative inline-flex size-10 items-center justify-center rounded-xl border border-white/50 bg-surface/60 text-brand shadow-sm backdrop-blur dark:border-white/10">
+          <ShieldCheck className="size-5" aria-hidden="true" />
+        </span>
+        <p className="relative mt-4 eyebrow">Legal and technical</p>
+        <h1 className="relative mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+          Privacy
+        </h1>
+        <p className="relative mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted">
+          Plainly: what is stored, where, what is transmitted to a third party, and what this
+          deployment does not promise.
+        </p>
 
-      <div className="mt-10 space-y-8">
-        {SECTIONS.map((section) => (
-          <section key={section.id} id={section.id} className="scroll-mt-24">
-            <h2 className="text-lg font-semibold tracking-tight text-ink">{section.title}</h2>
-            <ul className="mt-3 space-y-2.5">
+        <nav aria-label="On this page" className="relative mt-6">
+          <ul className="flex flex-wrap gap-1.5">
+            {SECTIONS.map((section) => (
+              <li key={section.id}>
+                <a
+                  href={`#${section.id}`}
+                  className="inline-flex rounded-full border border-line/80 bg-surface/40 px-3 py-1 text-xs text-muted backdrop-blur-sm transition-colors hover:border-brand/35 hover:text-brand"
+                >
+                  {section.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </header>
+
+      <div className="mt-8 space-y-4">
+        {SECTIONS.map((section, sectionIndex) => (
+          <section
+            key={section.id}
+            id={section.id}
+            className="glass scroll-mt-24 rounded-3xl p-5 sm:p-6"
+          >
+            <div className="flex items-baseline gap-3">
+              <span
+                aria-hidden="true"
+                className="font-mono text-[0.6875rem] tabular-nums text-subtle"
+              >
+                {String(sectionIndex + 1).padStart(2, "0")}
+              </span>
+              <h2 className="text-lg font-semibold tracking-tight text-ink">{section.title}</h2>
+            </div>
+            <ul className="mt-3 space-y-2.5 pl-7">
               {section.body.map((paragraph, index) => (
                 <li key={index} className="flex gap-2.5 text-sm leading-relaxed text-muted">
                   <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-brand" />
@@ -110,7 +153,7 @@ export default function PrivacyPage() {
         ))}
       </div>
 
-      <div className="mt-12 rounded-2xl border border-caution/30 bg-caution-soft/40 p-5">
+      <div className="glass mt-8 rounded-3xl border-caution/30 bg-caution-soft/30 p-5 sm:p-6">
         <p className="text-sm leading-relaxed text-ink">
           <strong className="font-semibold">Please avoid uploading unnecessary identifying
           information.</strong> If a report contains your name, address or national identifier, the

@@ -8,7 +8,7 @@ export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivEl
 
 export function CardSkeleton({ lines = 3 }: { lines?: number }) {
   return (
-    <div className="glass rounded-3xl p-5">
+    <div className="glass rounded-[1.75rem] p-5">
       <Skeleton className="h-4 w-1/3" />
       <div className="mt-4 space-y-2.5">
         {Array.from({ length: lines }).map((_, index) => (
@@ -28,7 +28,7 @@ export function AssessmentCardSkeleton({ count = 3 }: { count?: number }) {
     <div className="space-y-3" role="status" aria-live="polite" aria-busy="true">
       <span className="sr-only">Loading assessments</span>
       {Array.from({ length: count }).map((_, index) => (
-        <div key={index} className="glass rounded-2xl p-4">
+        <div key={index} className="glass rounded-[1.5rem] p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 space-y-2">
               <Skeleton className="h-3.5 w-2/5" />
@@ -62,17 +62,21 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "glass-subtle flex flex-col items-center justify-center rounded-3xl px-6 py-14 text-center",
+        "glass relative flex flex-col items-center justify-center overflow-hidden rounded-[1.75rem] px-6 py-16 text-center",
         className,
       )}
     >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(60%_100%_at_50%_0%,hsl(var(--brand)/0.16),transparent_75%)]"
+      />
       <div className="relative">
-        <div className="absolute inset-0 -z-10 rounded-2xl bg-brand/15 blur-2xl" aria-hidden="true" />
-        <div className="flex size-14 items-center justify-center rounded-2xl border border-brand/20 bg-brand/8">
-          <Icon className="size-6 text-brand" />
+        <div className="absolute inset-0 -z-10 rounded-2xl bg-brand/25 blur-2xl" aria-hidden="true" />
+        <div className="flex size-16 items-center justify-center rounded-2xl border border-brand/25 bg-gradient-to-b from-brand/15 to-brand/5 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.4)]">
+          <Icon className="size-7 text-brand" />
         </div>
       </div>
-      <h3 className="mt-5 text-base font-semibold text-ink">{title}</h3>
+      <h3 className="mt-6 text-base font-semibold text-ink">{title}</h3>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted">{description}</p>
       {action ? <div className="mt-6">{action}</div> : null}
     </div>

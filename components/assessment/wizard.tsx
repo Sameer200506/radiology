@@ -4,7 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Beaker, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Beaker, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -128,35 +128,50 @@ export function AssessmentWizard() {
         </header>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="glass flex flex-col rounded-3xl p-6">
-            <h2 className="text-base font-semibold tracking-tight text-ink">Start a real assessment</h2>
-            <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">
+          <div className="glass relative flex flex-col overflow-hidden rounded-3xl p-6">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-10 -top-16 size-40 rounded-full bg-brand/15 blur-3xl motion-safe:animate-drift"
+            />
+            <span className="relative flex size-10 items-center justify-center rounded-xl bg-brand/12 text-brand">
+              <Sparkles className="size-5" aria-hidden="true" />
+            </span>
+            <h2 className="relative mt-4 text-base font-semibold tracking-tight text-ink">
+              Start a real assessment
+            </h2>
+            <p className="relative mt-2 flex-1 text-sm leading-relaxed text-muted">
               Describe your own symptoms and optionally upload your own reports. Everything stays in
               your account and you can delete it at any time.
             </p>
-            <Button className="mt-6" size="lg" onClick={startFromScratch} disabled={startingDemo !== null}>
+            <Button className="relative mt-6" size="lg" onClick={startFromScratch} disabled={startingDemo !== null}>
               Start assessment
-              <Sparkles className="size-4" aria-hidden="true" />
+              <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </div>
 
-          <div className="glass flex flex-col rounded-3xl border-accent/25 bg-accent/5 p-6">
-            <div className="flex items-center gap-2">
-              <Beaker className="size-4 text-accent" aria-hidden="true" />
+          <div className="glass relative flex flex-col overflow-hidden rounded-3xl border-accent/25 bg-accent/5 p-6">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-20 -left-10 size-44 rounded-full bg-accent/15 blur-3xl motion-safe:animate-drift-slow"
+            />
+            <div className="relative flex items-center gap-2">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-accent/12 text-accent">
+                <Beaker className="size-5" aria-hidden="true" />
+              </span>
               <h2 className="text-base font-semibold tracking-tight text-ink">Explore a demo</h2>
             </div>
-            <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">
+            <p className="relative mt-3 flex-1 text-sm leading-relaxed text-muted">
               Three fictional scenarios covering the normal path, the emergency safety path, and
               report review.
             </p>
-            <ul className="mt-4 space-y-2">
+            <ul className="relative mt-4 space-y-2">
               {DEMO_SCENARIOS.map((scenario) => (
                 <li key={scenario.id}>
                   <button
                     type="button"
                     onClick={() => void startDemo(scenario.id)}
                     disabled={startingDemo !== null}
-                    className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface/50 px-3.5 py-3 text-left transition-colors hover:border-accent/45 hover:bg-accent/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                    className="flex w-full items-center gap-3 rounded-xl border border-line/80 bg-surface/45 px-3.5 py-3 text-left backdrop-blur-sm transition-colors hover:border-accent/45 hover:bg-accent/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                   >
                     {startingDemo === scenario.id ? (
                       <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden="true" />

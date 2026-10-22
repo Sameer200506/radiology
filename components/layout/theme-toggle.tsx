@@ -28,7 +28,13 @@ function useHydrated(): boolean {
   );
 }
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const hydrated = useHydrated();
 
@@ -42,7 +48,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       role="radiogroup"
       aria-label="Colour theme"
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-full border border-line bg-surface/60 p-1",
+        "inline-flex items-center gap-0.5 rounded-full border border-line/70 bg-surface/40 p-1 shadow-[inset_0_1px_2px_hsl(228_46%_10%/0.04)] backdrop-blur-md",
         className,
       )}
     >
@@ -55,15 +61,19 @@ export function ThemeToggle({ className }: { className?: string }) {
             type="button"
             role="radio"
             aria-checked={isSelected}
+            aria-label={`${option.label} theme`}
             title={`${option.label} theme`}
             onClick={() => setTheme(option.value)}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-medium transition-all",
-              isSelected ? "bg-brand/12 text-brand" : "text-subtle hover:text-ink",
+              "flex items-center justify-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-300",
+              compact ? "flex-1" : "flex-1",
+              isSelected
+                ? "bg-gradient-to-b from-surface to-surface/70 text-brand shadow-[0_1px_2px_hsl(228_46%_10%/0.12),inset_0_1px_0_hsl(0_0%_100%/0.7)] dark:from-white/15 dark:to-white/5"
+                : "text-subtle hover:text-ink",
             )}
           >
             <Icon className="size-4" aria-hidden="true" />
-            <span>{option.label}</span>
+            {compact ? <span className="sr-only">{option.label}</span> : <span>{option.label}</span>}
             {effective === option.value ? <span className="sr-only">(active)</span> : null}
           </button>
         );

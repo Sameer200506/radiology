@@ -50,15 +50,17 @@ export function SelectOptionList({
     >
       {options.map((option) => {
         const id = `${name}-${option.value}`;
+        const selected = value === option.value;
         return (
           <label
             key={option.value}
             htmlFor={id}
             className={cn(
-              "group flex cursor-pointer items-start gap-3 rounded-xl border bg-surface/60 px-4 py-3 transition-all",
-              "hover:border-brand/45 hover:bg-brand/5",
+              "group flex cursor-pointer items-start gap-3 rounded-2xl border border-line/80 bg-surface/40 px-4 py-3 backdrop-blur-sm transition-all",
+              "hover:border-brand/40 hover:bg-brand/[0.06]",
               "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand",
-              value === option.value ? "border-brand bg-brand/8" : "border-line",
+              selected &&
+                "border-brand/45 bg-brand/[0.08] shadow-[0_0_0_3px_hsl(var(--brand)/0.06)]",
               disabled && "cursor-not-allowed opacity-60 hover:border-line hover:bg-surface/60",
             )}
           >
@@ -66,12 +68,12 @@ export function SelectOptionList({
               id={id}
               value={option.value}
               className={cn(
-                "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-all",
                 "border-line-strong group-hover:border-brand/60",
-                value === option.value ? "border-brand" : "border-line-strong",
+                selected && "border-brand bg-brand/10",
               )}
             >
-              <RadioGroupPrimitive.Indicator className="size-2.5 rounded-full bg-brand" />
+              <RadioGroupPrimitive.Indicator className="size-2.5 rounded-full bg-brand shadow-[0_0_8px_hsl(var(--brand)/0.7)]" />
             </RadioGroupPrimitive.Item>
             <span className="min-w-0">
               <span className="block text-sm font-medium text-ink">{option.label}</span>
@@ -125,17 +127,20 @@ export function MultiOptionList({
             key={option.value}
             htmlFor={id}
             className={cn(
-              "group flex cursor-pointer items-start gap-3 rounded-xl border bg-surface/60 px-4 py-3 transition-all",
-              "hover:border-brand/45 hover:bg-brand/5",
+              "group flex cursor-pointer items-start gap-3 rounded-2xl border border-line/80 bg-surface/40 px-4 py-3 backdrop-blur-sm transition-all",
+              "hover:border-brand/40 hover:bg-brand/[0.06]",
               "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand",
-              checked ? "border-brand bg-brand/8" : "border-line",
+              checked &&
+                "border-brand/45 bg-brand/[0.08] shadow-[0_0_0_3px_hsl(var(--brand)/0.06)]",
               disabled && "cursor-not-allowed opacity-60",
             )}
           >
             <span
               className={cn(
-                "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
-                checked ? "border-brand bg-brand text-white" : "border-line-strong group-hover:border-brand/60",
+                "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border-2 transition-all",
+                checked
+                  ? "border-brand bg-gradient-to-b from-brand to-brand-strong text-white"
+                  : "border-line-strong group-hover:border-brand/60",
               )}
             >
               {checked ? <Check className="size-3" strokeWidth={3} /> : null}

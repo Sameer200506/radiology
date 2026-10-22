@@ -7,20 +7,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+  [
+    "group/button relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium",
+    "transition-all duration-300 disabled:pointer-events-none disabled:opacity-50",
+    "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+    "active:scale-[0.975] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+  ],
   {
     variants: {
       variant: {
         primary:
-          "bg-brand text-white shadow-[0_8px_24px_-10px_hsl(var(--brand)/0.8)] hover:bg-brand-strong hover:shadow-[0_12px_32px_-10px_hsl(var(--brand)/0.9)]",
+          "border border-white/15 bg-gradient-to-b from-brand to-brand-strong text-white shadow-[0_1px_0_0_hsl(0_0%_100%/0.25)_inset,0_14px_32px_-14px_hsl(var(--brand)/0.75)] hover:shadow-[0_1px_0_0_hsl(0_0%_100%/0.3)_inset,0_20px_40px_-16px_hsl(var(--brand)/0.85)] hover:brightness-105",
         secondary:
-          "glass text-ink hover:border-brand/40 hover:bg-brand/5",
+          "glass text-ink hover:border-brand/35 hover:bg-brand/[0.07] hover:shadow-[var(--shadow-lift)]",
         outline:
-          "border border-line-strong bg-transparent text-ink hover:bg-brand/8 hover:border-brand/40",
-        ghost: "text-muted hover:bg-brand/8 hover:text-ink",
+          "border border-line-strong/80 bg-surface/30 text-ink backdrop-blur-md hover:border-brand/45 hover:bg-brand/[0.07]",
+        ghost:
+          "text-muted hover:bg-ink/[0.05] hover:text-ink dark:hover:bg-white/[0.06]",
         danger:
-          "bg-critical text-white hover:opacity-90 shadow-[0_8px_24px_-10px_hsl(var(--critical)/0.8)]",
-        link: "text-brand underline-offset-4 hover:underline p-0 h-auto rounded-none",
+          "border border-white/15 bg-gradient-to-b from-critical to-[hsl(var(--critical)/0.82)] text-white shadow-[0_1px_0_0_hsl(0_0%_100%/0.2)_inset,0_14px_30px_-14px_hsl(var(--critical)/0.7)] hover:brightness-105",
+        link: "h-auto rounded-none p-0 text-brand underline-offset-4 hover:underline",
       },
       size: {
         sm: "h-9 px-4 text-[0.8125rem]",

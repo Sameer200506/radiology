@@ -1,4 +1,12 @@
 import type { Metadata } from "next";
+import { HelpCircle } from "lucide-react";
+
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 export const metadata: Metadata = {
   title: "Frequently asked questions",
@@ -51,32 +59,51 @@ const FAQ = [
 
 export default function FaqPage() {
   return (
-    <main id="main-content" className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6">
-      <p className="eyebrow">Support</p>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-        Frequently asked questions
-      </h1>
-      <p className="mt-4 text-pretty text-base leading-relaxed text-muted">
-        Straight answers about what this application does, what it refuses to do, and how your
-        information is handled.
-      </p>
+    <main id="main-content" className="mx-auto w-full max-w-3xl px-4 py-14 sm:px-6 sm:py-20">
+      <header className="glass relative overflow-hidden rounded-[2rem] p-6 sm:p-9">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full bg-brand/15 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-accent/12 blur-3xl"
+        />
+        <span className="relative inline-flex size-10 items-center justify-center rounded-xl border border-white/50 bg-surface/60 text-brand shadow-sm backdrop-blur dark:border-white/10">
+          <HelpCircle className="size-5" aria-hidden="true" />
+        </span>
+        <p className="relative mt-4 eyebrow">Support</p>
+        <h1 className="relative mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+          Frequently asked questions
+        </h1>
+        <p className="relative mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted">
+          Straight answers about what this application does, what it refuses to do, and how your
+          information is handled.
+        </p>
+      </header>
 
-      <div className="mt-10 space-y-3">
-        {FAQ.map((item) => (
-          <details key={item.q} className="glass group rounded-2xl p-5 [&_summary::-webkit-details-marker]:hidden">
-            <summary className="flex cursor-pointer list-none items-start justify-between gap-4 text-sm font-medium text-ink">
-              {item.q}
-              <span
-                aria-hidden="true"
-                className="mt-0.5 shrink-0 text-lg leading-none text-brand transition-transform group-open:rotate-45"
-              >
-                +
+      <Accordion type="single" collapsible className="mt-8 space-y-3">
+        {FAQ.map((item, index) => (
+          <AccordionItem key={item.q} value={`faq-${index}`}>
+            <AccordionTrigger>
+              <span className="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  className="mt-px font-mono text-[0.6875rem] tabular-nums text-subtle"
+                >
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                {item.q}
               </span>
-            </summary>
-            <p className="mt-3 text-sm leading-relaxed text-muted">{item.a}</p>
-          </details>
+            </AccordionTrigger>
+            <AccordionContent className="pl-9">{item.a}</AccordionContent>
+          </AccordionItem>
         ))}
-      </div>
+      </Accordion>
+
+      <p className="mt-10 text-center text-xs text-subtle">
+        Still unsure? The disclaimer explains the limits of this tool in full.
+      </p>
     </main>
   );
 }

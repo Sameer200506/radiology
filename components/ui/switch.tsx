@@ -13,17 +13,18 @@ export const Switch = React.forwardRef<
     <SwitchPrimitive.Root
       ref={ref}
       className={cn(
-        "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
+        "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-all",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        "data-[state=checked]:bg-brand data-[state=unchecked]:bg-line-strong",
+        "data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-brand data-[state=checked]:to-brand-strong data-[state=checked]:shadow-[0_4px_14px_-4px_hsl(var(--brand)/0.8)]",
+        "data-[state=unchecked]:bg-ink/15 data-[state=unchecked]:backdrop-blur-sm dark:data-[state=unchecked]:bg-white/15",
         className,
       )}
       {...props}
     >
       <SwitchPrimitive.Thumb
         className={cn(
-          "pointer-events-none block size-5 rounded-full bg-white shadow-lg ring-0 transition-transform",
+          "pointer-events-none block size-5 rounded-full bg-white shadow-[0_1px_3px_hsl(0_0%_0%/0.25)] ring-0 transition-transform",
           "data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0",
         )}
       />

@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { AuthCard, FormError, FormSuccess } from "@/components/auth/auth-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { isFirebaseConfigured } from "@/lib/firebase/client";
 import { sendReset } from "@/lib/auth/client";
 
@@ -73,9 +74,7 @@ export function ForgotPasswordForm() {
           <FormError message={error} />
 
           <div className="space-y-1.5">
-            <label htmlFor="reset-email" className="text-sm font-medium text-ink">
-              Email address
-            </label>
+            <Label htmlFor="reset-email">Email address</Label>
             <Input
               id="reset-email"
               type="email"

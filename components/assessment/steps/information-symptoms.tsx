@@ -6,6 +6,8 @@ import { ArrowLeft, ArrowRight, Info, Lock, Sparkles, TriangleAlert } from "luci
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { MedicalDisclaimer } from "@/components/medical/disclaimer";
 import { EmergencyBanner } from "@/components/medical/emergency-banner";
@@ -95,9 +97,7 @@ export function StepInformation() {
 
       <div className="glass grid gap-5 rounded-3xl p-5 sm:p-6 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <label htmlFor="age" className="text-sm font-medium text-ink">
-            Age
-          </label>
+          <Label htmlFor="age">Age</Label>
           <Input
             id="age"
             type="number"
@@ -123,7 +123,7 @@ export function StepInformation() {
                   className={cn(
                     "cursor-pointer rounded-full border px-3.5 py-1.5 text-sm transition-colors",
                     "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand",
-                    selected ? "border-brand bg-brand/10 font-medium text-brand" : "border-line text-muted hover:border-brand/40",
+                    selected ? "border-brand bg-brand/10 font-medium text-brand shadow-[0_0_0_3px_hsl(var(--brand)/0.08)]" : "border-line/90 bg-surface/35 text-muted backdrop-blur-sm hover:border-brand/40 hover:bg-brand/5",
                   )}
                 >
                   <input
@@ -275,8 +275,8 @@ export function StepSymptoms() {
                     "cursor-pointer rounded-full border px-3.5 py-1.5 text-sm transition-all",
                     "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand",
                     isSelected
-                      ? "border-brand bg-brand/10 font-medium text-brand"
-                      : "border-line text-muted hover:border-brand/40 hover:bg-brand/5",
+                      ? "border-brand bg-brand/10 font-medium text-brand shadow-[0_0_0_3px_hsl(var(--brand)/0.08)]"
+                      : "border-line/90 bg-surface/35 text-muted backdrop-blur-sm hover:border-brand/40 hover:bg-brand/5",
                   )}
                 >
                   <input
@@ -294,9 +294,7 @@ export function StepSymptoms() {
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <label htmlFor="duration" className="text-sm font-medium text-ink">
-              How long have you had this?
-            </label>
+            <Label htmlFor="duration">How long have you had this?</Label>
             <Input
               id="duration"
               value={duration}
@@ -306,9 +304,7 @@ export function StepSymptoms() {
             />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="severity" className="text-sm font-medium text-ink">
-              How severe is it?
-            </label>
+            <Label htmlFor="severity">How severe is it?</Label>
             <Input
               id="severity"
               value={severity}
@@ -322,10 +318,8 @@ export function StepSymptoms() {
 
       <div className="glass rounded-3xl p-5 sm:p-6">
         <div className="space-y-1.5">
-          <label htmlFor="freeText" className="text-sm font-medium text-ink">
-            Describe it in your own words
-          </label>
-          <textarea
+          <Label htmlFor="freeText">Describe it in your own words</Label>
+          <Textarea
             id="freeText"
             rows={5}
             value={freeText}
@@ -334,11 +328,7 @@ export function StepSymptoms() {
             placeholder="For example: I have had a cough for about six days and it is not improving. I measured 38.4 in the evening and I am bringing up yellow phlegm. I feel tired but I can still walk to work."
             aria-invalid={textError ? true : undefined}
             aria-describedby={textError ? "freeText-error" : "freeText-hint"}
-            className={cn(
-              "w-full resize-y rounded-xl border bg-surface/70 px-3.5 py-3 text-sm leading-relaxed text-ink transition-colors",
-              "placeholder:text-subtle focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12",
-              textError ? "border-critical/60" : "border-line",
-            )}
+            className={cn("leading-relaxed", textError && "border-critical/60")}
           />
           <p id="freeText-hint" className="flex items-start gap-1.5 text-xs text-subtle">
             <Info className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
@@ -385,8 +375,8 @@ export function WizardNav({
   hint?: string;
 }) {
   return (
-    <div className="sticky bottom-0 -mx-4 mt-8 border-t border-line/70 bg-canvas/85 px-4 py-4 backdrop-blur-lg sm:-mx-6 sm:px-6">
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="sticky bottom-3 z-20 mt-8">
+      <div className="glass-strong flex flex-col-reverse gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
         {onBack ? (
           <Button variant="ghost" onClick={onBack} type="button">
             <ArrowLeft className="size-4" aria-hidden="true" />

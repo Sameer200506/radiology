@@ -10,6 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AssessmentCardSkeleton, EmptyState } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -137,9 +145,9 @@ export function AssessmentsListView() {
       <Card variant="glass" padding="sm">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1 space-y-1.5">
-            <label htmlFor="search" className="text-xs font-medium text-ink">
+            <Label htmlFor="search" className="text-xs font-medium text-muted">
               Search
-            </label>
+            </Label>
             <div className="relative">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle"
@@ -155,42 +163,48 @@ export function AssessmentsListView() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="status-filter" className="text-xs font-medium text-ink">
+          <div className="min-w-[9.5rem] space-y-1.5">
+            <Label htmlFor="status-filter" className="text-xs font-medium text-muted">
               Status
-            </label>
-            <select
-              id="status-filter"
-              value={status}
-              onChange={(event) => setStatus(event.target.value as AssessmentStatus | "")}
-              className="h-11 rounded-xl border border-line bg-surface/70 px-3 text-sm text-ink focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12"
+            </Label>
+            <Select
+              value={status || "all"}
+              onValueChange={(value) => setStatus(value === "all" ? "" : (value as AssessmentStatus))}
             >
-              <option value="">All statuses</option>
-              {STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {value.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="status-filter" aria-label="Filter by status">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                {STATUSES.map((value) => (
+                  <SelectItem key={value} value={value} className="capitalize">
+                    {value.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="urgency-filter" className="text-xs font-medium text-ink">
+          <div className="min-w-[9.5rem] space-y-1.5">
+            <Label htmlFor="urgency-filter" className="text-xs font-medium text-muted">
               Urgency
-            </label>
-            <select
-              id="urgency-filter"
-              value={urgency}
-              onChange={(event) => setUrgency(event.target.value as UrgencyLevel | "")}
-              className="h-11 rounded-xl border border-line bg-surface/70 px-3 text-sm text-ink focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12"
+            </Label>
+            <Select
+              value={urgency || "all"}
+              onValueChange={(value) => setUrgency(value === "all" ? "" : (value as UrgencyLevel))}
             >
-              <option value="">All levels</option>
-              {URGENCY_LEVELS.map((value) => (
-                <option key={value} value={value}>
-                  {value.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="urgency-filter" aria-label="Filter by urgency">
+                <SelectValue placeholder="All levels" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All levels</SelectItem>
+                {URGENCY_LEVELS.map((value) => (
+                  <SelectItem key={value} value={value} className="capitalize">
+                    {value.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </Card>

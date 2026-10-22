@@ -146,7 +146,7 @@ export function StoredAssessmentView({
             {uploads.map((upload) => (
               <li
                 key={upload.id}
-                className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface/50 px-4 py-3"
+                className="flex flex-wrap items-center gap-3 rounded-2xl border border-line/80 bg-surface/35 px-4 py-3 backdrop-blur-sm"
               >
                 <FileText className="size-4 shrink-0 text-brand" aria-hidden="true" />
                 <div className="min-w-0 flex-1">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils/cn";
+import { Progress } from "@/components/ui/progress";
 import { STEP_LABELS, useWizard, type WizardStep } from "@/components/assessment/wizard-store";
 
 /**
@@ -27,7 +28,7 @@ export function ProgressIndicator({
   const percent = ((step + 1) / total) * 100;
 
   return (
-    <nav aria-label="Assessment progress" className="mb-8">
+    <nav aria-label="Assessment progress" className="glass mb-8 rounded-3xl p-4 sm:p-5">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm font-medium text-ink">
           Step {step + 1} of {total}
@@ -38,19 +39,11 @@ export function ProgressIndicator({
         </p>
       </div>
 
-      <div
-        className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted/15"
-        role="progressbar"
-        aria-valuenow={step + 1}
-        aria-valuemin={1}
-        aria-valuemax={total}
+      <Progress
+        value={percent}
+        className="mt-3"
         aria-label={`Assessment progress: step ${step + 1} of ${total}`}
-      >
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-brand to-accent transition-[width] duration-500 ease-out"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+      />
 
       <ol className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-2">
         {STEP_LABELS.map((label, index) => {

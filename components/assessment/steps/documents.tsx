@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UploadDropzone } from "@/components/uploads/uploader";
@@ -30,7 +31,7 @@ import {
   type UploadState,
   type WizardStep,
 } from "@/components/assessment/wizard-store";
-import { api, errorMessage } from "@/lib/api/client";
+import { api, errorMessage, isRetryable } from "@/lib/api/client";
 import { deleteUpload, updateUpload, uploadFile, writeAuditLog } from "@/lib/data";
 import { guessDocumentKind, sanitizeFileName, shortenFileName } from "@/lib/security/upload-policy";
 import {
@@ -40,7 +41,8 @@ import {
   imageExtractionResult,
 } from "@/lib/medical/extract-text-client";
 import { MAX_FILE_BYTES } from "@/lib/uploads/limits";
-import { isVisionAnalysisAvailableHint } from "@/components/medical/vision-note";
+import { isVisionAnalysisAvailableHint, useWarmCapabilities } from "@/components/medical/vision-note";
+import { resolveStorageDriver } from "@/lib/storage/driver-client";
 
 /**
  * Step 4 — uploads.
@@ -61,6 +63,37 @@ export function StepDocuments() {
   const [pastedText, setPastedText] = React.useState("");
   const [analysing, setAnalysing] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [failedAnalysis, setFailedAnalysis] = React.useState<{ id: string; text: string } | null>(null);
+  const [storageDriver, setStorageDriver] = React.useState<"local" | "firebase" | null>(null);
+
+  // Which storage driver the server uses decides where uploads go. Resolve it
+  // once on mount so the note below (and the upload path) tells the truth.
+  React.useEffect(() => {
+    let active = true;
+    void resolveStorageDriver().then((driver) => {
+      if (active) setStorageDriver(driver);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // The hint reads a module-level cache that starts as `false`. Warm it on
+  // mount and re-render when the server answers, otherwise this page shows
+  // "image analysis is not available" forever even when the model sees images.
+  const [, forceVisionRefresh] = React.useState(0);
+  useWarmCapabilities();
+  React.useEffect(() => {
+    let active = true;
+    void import("@/components/medical/vision-note").then(({ fetchCapabilities }) =>
+      fetchCapabilities().then(() => {
+        if (active) forceVisionRefresh((n) => n + 1);
+      }),
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const visionAvailable = isVisionAnalysisAvailableHint();
 
@@ -93,8 +126,12 @@ export function StepDocuments() {
 
         setPastedFor(null);
         setPastedText("");
+        setFailedAnalysis(null);
+        setError(null);
       } catch (analysisError) {
-        setError(errorMessage(analysisError, "The text could not be analysed."));
+        const message = errorMessage(analysisError, "The text could not be analysed.");
+        setFailedAnalysis({ id: upload.id, text });
+        setError(isRetryable(analysisError) ? message + " You can retry below \u2014 this is usually temporary." : message);
       } finally {
         setAnalysing(null);
       }
@@ -198,7 +235,9 @@ export function StepDocuments() {
             type: "patchUpload",
             payload: { id: tempId, patch: { status: "failed", uploading: false, error: message } },
           });
-          setError(`${displayName}: ${message}`);
+          // No banner here: the failed row right below already carries this
+          // message, and printing it twice made one failure look like two.
+          // The banner is kept for errors that belong to no single file.
         }
       }
     },
@@ -276,36 +315,47 @@ export function StepDocuments() {
           account. Laboratory values are transcribed exactly as printed, so you can check them
           against the original.
         </p>
+        {storageDriver === "local" ? (
+          <p className="mt-2 text-xs leading-relaxed text-subtle">
+            Local testing mode: uploads are saved on this computer under{" "}
+            <code className="rounded bg-surface px-1 py-0.5">.local-storage/</code> instead of cloud
+            storage, so no Firebase bucket is needed.
+          </p>
+        ) : null}
       </header>
 
       {error ? (
-        <p
+        <div
           role="alert"
-          className="flex items-start gap-2 rounded-2xl border border-critical/30 bg-critical/8 p-4 text-sm leading-relaxed text-ink"
+          className="flex items-start gap-3 rounded-2xl border border-critical/30 bg-critical/8 p-4 text-sm leading-relaxed text-ink"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-critical" aria-hidden="true" />
-          {error}
-        </p>
+          <p className="min-w-0 flex-1">{error}</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setError(null)}
+            className="shrink-0 text-xs"
+          >
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            Dismiss
+          </Button>
+        </div>
       ) : null}
 
       <UploadDropzone onFiles={(files) => void handleFiles(files)} />
 
       {allUploads.length > 0 ? (
         <section aria-labelledby="uploads-heading">
-          <div className="flex items-center justify-between gap-3">
-            <h3 id="uploads-heading" className="text-sm font-semibold text-ink">
-              {allUploads.length} file{allUploads.length === 1 ? "" : "s"} added
-            </h3>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setError(null)} className="text-xs">
-              <RotateCcw className="size-3.5" aria-hidden="true" />
-              Dismiss
-            </Button>
-          </div>
+          <h3 id="uploads-heading" className="text-sm font-semibold text-ink">
+            {allUploads.length} file{allUploads.length === 1 ? "" : "s"} added
+          </h3>
 
           <ul className="mt-3 space-y-2.5">
             {allUploads.map((upload) => (
               <li key={upload.id} className="space-y-2">
-                <div className="flex items-start gap-3 rounded-2xl border border-line bg-surface/50 p-3.5">
+                <div className="flex items-start gap-3 rounded-2xl border border-line/80 bg-surface/35 p-3.5 backdrop-blur-sm">
                   <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
                     {upload.mimeType.startsWith("image/") ? (
                       <ImageIcon className="size-4" aria-hidden="true" />
@@ -377,6 +427,19 @@ export function StepDocuments() {
                     <Button type="button" variant="outline" size="sm" onClick={() => setViewing(upload)}>
                       <Plus className="size-3.5" aria-hidden="true" />
                       View image
+                    </Button>
+                  ) : null}
+
+                  {failedAnalysis && failedAnalysis.id === upload.id && upload.extractedText && !upload.analysis ? (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => void analyseText(upload, failedAnalysis.text)}
+                      loading={analysing === upload.id}
+                    >
+                      <RotateCcw className="size-3.5" aria-hidden="true" />
+                      Retry analysis
                     </Button>
                   ) : null}
 
@@ -484,9 +547,7 @@ export function StepDocuments() {
           </DialogHeader>
 
           <div className="mt-5 space-y-3">
-            <label htmlFor="pasted-report" className="text-sm font-medium text-ink">
-              Report text
-            </label>
+            <Label htmlFor="pasted-report">Report text</Label>
             <Textarea
               id="pasted-report"
               rows={10}

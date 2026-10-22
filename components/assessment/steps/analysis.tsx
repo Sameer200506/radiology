@@ -6,6 +6,7 @@ import { AlertCircle, Check, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { MedicalDisclaimer } from "@/components/medical/disclaimer";
 import {
   buildAssessmentCase,
@@ -375,6 +376,10 @@ export function StepAnalysis() {
   const allSettled = state.stages.every(
     (stage) => stage.status === "done" || stage.status === "skipped",
   );
+  const settledCount = state.stages.filter(
+    (stage) => stage.status === "done" || stage.status === "skipped",
+  ).length;
+  const progress = state.stages.length === 0 ? 0 : (settledCount / state.stages.length) * 100;
 
   return (
     <div className="space-y-7">
@@ -386,6 +391,12 @@ export function StepAnalysis() {
           Each step below runs only when it is needed, and shows what it actually did. Nothing is
           simulated.
         </p>
+        <div className="mt-4 flex items-center gap-3">
+          <Progress value={progress} className="h-1.5 max-w-sm" />
+          <span className="shrink-0 text-xs tabular-nums text-subtle">
+            {settledCount}/{state.stages.length}
+          </span>
+        </div>
       </header>
 
       <ol className="glass space-y-1 rounded-3xl p-4 sm:p-5" aria-live="polite">

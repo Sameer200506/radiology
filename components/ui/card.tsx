@@ -5,16 +5,16 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils/cn";
 
-const cardVariants = cva("relative rounded-3xl", {
+const cardVariants = cva("relative rounded-[1.75rem]", {
   variants: {
     variant: {
       glass: "glass",
       "glass-strong": "glass-strong",
       "glass-subtle": "glass-subtle",
-      solid: "bg-surface border border-line",
-      outline: "border border-line bg-transparent",
+      solid: "border border-line/80 bg-surface/90 shadow-[var(--shadow-glass)]",
+      outline: "border border-line/80 bg-transparent",
       gradient:
-        "border border-transparent bg-gradient-to-br from-brand/12 via-accent/10 to-transparent backdrop-blur-xl border-brand/15",
+        "glass border-brand/20 bg-gradient-to-br from-brand/[0.1] via-accent/[0.07] to-transparent",
     },
     padding: {
       none: "p-0",
@@ -24,7 +24,8 @@ const cardVariants = cva("relative rounded-3xl", {
     },
     hover: {
       none: "",
-      lift: "transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] hover:border-brand/30",
+      lift: "spotlight transition-all duration-300 hover:-translate-y-1 hover:border-brand/25 hover:shadow-[var(--shadow-lift)]",
+      glow: "transition-all duration-300 hover:border-brand/30 hover:shadow-[var(--shadow-glow)]",
     },
   },
   defaultVariants: {
@@ -47,7 +48,9 @@ export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDiv
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn("text-base font-semibold tracking-tight text-ink", className)} {...props} />;
+  return (
+    <h3 className={cn("text-base font-semibold tracking-tight text-ink", className)} {...props} />
+  );
 }
 
 export function CardDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {

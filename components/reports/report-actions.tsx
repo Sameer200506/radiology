@@ -212,7 +212,10 @@ export function ReportActions({
         </div>
 
         {error ? (
-          <p role="alert" className="mt-3 text-sm text-critical">
+          <p
+            role="alert"
+            className="mt-3 rounded-xl border border-critical/30 bg-critical/8 px-3.5 py-2.5 text-sm text-critical"
+          >
             {error}
           </p>
         ) : null}

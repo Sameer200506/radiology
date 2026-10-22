@@ -56,8 +56,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f9fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1017" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f7fc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0d16" },
   ],
 };
 
@@ -93,8 +93,13 @@ export default function RootLayout({
         />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        <div className="aurora" aria-hidden="true" />
-        <div className="grid-texture pointer-events-none fixed inset-0 -z-10" aria-hidden="true" />
+        <div className="scene" aria-hidden="true">
+          <div className="scene-grid" />
+          <div className="scene-orb scene-orb--brand" />
+          <div className="scene-orb scene-orb--accent" />
+          <div className="scene-orb scene-orb--cyan" />
+          <div className="scene-noise" />
+        </div>
         <Providers>
           <AuthProvider>{children}</AuthProvider>
         </Providers>

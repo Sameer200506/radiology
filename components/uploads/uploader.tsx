@@ -71,13 +71,17 @@ export function UploadDropzone({
       }}
       onDrop={onDrop}
       className={cn(
-        "relative rounded-3xl border-2 border-dashed p-6 text-center transition-all sm:p-10",
+        "group relative overflow-hidden rounded-3xl border-2 border-dashed p-6 text-center transition-all sm:p-10",
         dragging
-          ? "border-brand bg-brand/8 scale-[1.005]"
-          : "border-line-strong bg-surface/40 hover:border-brand/45 hover:bg-brand/[0.03]",
+          ? "scale-[1.005] border-brand bg-brand/8 shadow-[0_0_0_6px_hsl(var(--brand)/0.08)]"
+          : "border-line-strong/80 bg-surface/30 backdrop-blur-md hover:border-brand/45 hover:bg-brand/[0.03]",
         disabled && "pointer-events-none opacity-60",
       )}
     >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--brand)/0.10),transparent_70%)]"
+      />
       <input
         ref={inputRef}
         id={id}
@@ -103,19 +107,19 @@ export function UploadDropzone({
         }}
       />
 
-      <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-brand/20 bg-brand/8">
+      <div className="relative mx-auto flex size-14 items-center justify-center rounded-2xl border border-brand/20 bg-brand/8 shadow-[0_12px_30px_-16px_hsl(var(--brand)/0.6)]">
         <UploadCloud className="size-6 text-brand" aria-hidden="true" />
       </div>
 
-      <p className="mt-5 text-sm font-medium text-ink">
+      <p className="relative mt-5 text-sm font-medium text-ink">
         Drop files here, or choose them from your device
       </p>
-      <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-subtle">
+      <p className="relative mx-auto mt-2 max-w-md text-xs leading-relaxed text-subtle">
         {hint ??
           `PDF, JPG, PNG or WEBP. Up to ${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB per file, ${formatBytes(30 * 1024 * 1024)} in total.`}
       </p>
 
-      <div className="mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
+      <div className="relative mt-5 flex flex-col items-center justify-center gap-2 sm:flex-row">
         <Button type="button" variant="secondary" onClick={() => inputRef.current?.click()} disabled={disabled}>
           <FileText className="size-4" aria-hidden="true" />
           Choose files
@@ -163,7 +167,7 @@ export function UploadRow({
   }[status];
 
   return (
-    <li className="flex items-start gap-3 rounded-2xl border border-line bg-surface/50 p-3.5">
+    <li className="flex items-start gap-3 rounded-2xl border border-line/80 bg-surface/35 p-3.5 backdrop-blur-sm">
       <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
         <Icon className="size-4" aria-hidden="true" />
       </span>

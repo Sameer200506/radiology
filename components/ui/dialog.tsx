@@ -19,7 +19,7 @@ export const DialogOverlay = React.forwardRef<
     <DialogPrimitive.Overlay
       ref={ref}
       className={cn(
-        "fixed inset-0 z-50 bg-slate-950/55 backdrop-blur-sm",
+        "fixed inset-0 z-50 bg-[hsl(228_46%_6%/0.55)] backdrop-blur-xl",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
         className,
@@ -45,8 +45,8 @@ export const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "glass-strong fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2",
-          "rounded-3xl p-6 focus:outline-none",
+          "glass-strong glass-rule fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto",
+          "rounded-[1.75rem] p-6 focus:outline-none sm:p-7",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
           "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
@@ -57,7 +57,7 @@ export const DialogContent = React.forwardRef<
         {children}
         {!hideClose ? (
           <DialogPrimitive.Close
-            className="absolute right-4 top-4 rounded-full p-1.5 text-muted transition-colors hover:bg-muted/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
+            className="absolute right-4 top-4 rounded-full border border-line/70 bg-surface/50 p-1.5 text-muted transition-colors hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
             aria-label="Close dialog"
           >
             <X className="size-4" />
