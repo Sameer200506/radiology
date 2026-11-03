@@ -19,6 +19,13 @@ export interface AiCapabilities {
   visionModel: string | null;
   primaryModel: string;
   fallbackModel: string | null;
+  /** The signed-in user's own ChatGPT plan connection, when present. */
+  chatgpt?: {
+    connected: boolean;
+    email: string | null;
+    planUsage: boolean;
+    model: string | null;
+  };
 }
 
 const FALLBACK: AiCapabilities = {
@@ -38,6 +45,12 @@ export function isVisionAnalysisAvailableHint(): boolean {
 
 export function getCachedCapabilities(): AiCapabilities | null {
   return cached;
+}
+
+/** Drops the cache after connecting/disconnecting a personal AI account. */
+export function clearCapabilitiesCache(): void {
+  cached = null;
+  inflight = null;
 }
 
 export async function fetchCapabilities(): Promise<AiCapabilities> {

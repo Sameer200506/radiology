@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth/session", () => ({
   getSessionUser: vi.fn(),
+  isSecureRequest: vi.fn(() => false),
 }));
 
 import { getSessionUser } from "@/lib/auth/session";

@@ -21,16 +21,22 @@
  * to `lib/ai/gemini.ts` when Gemini is active.
  */
 
+import { getAiConnection } from "@/lib/ai/context";
+
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
-export type AiProviderName = "openrouter" | "gemini";
+export type AiProviderName = "openrouter" | "gemini" | "chatgpt";
 
 /**
- * The provider is decided purely by configuration: a Gemini key always wins,
- * so a deployment can carry both keys and switch by setting/unsetting one.
+ * The provider is decided by the request first, then by configuration.
+ *
+ * A signed-in user who connected their ChatGPT account gets that account for
+ * their own requests. Everyone else uses the deployment provider (Gemini when a
+ * key is present, OpenRouter otherwise).
  */
 export function activeProvider(): AiProviderName {
+  if (getAiConnection()?.planUsage) return "chatgpt";
   return process.env.GEMINI_API_KEY?.trim() ? "gemini" : "openrouter";
 }
 
@@ -51,6 +57,33 @@ export const DEFAULT_MODEL = "auto";
 export const DEFAULT_FALLBACK_MODEL = "auto";
 export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 export const DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-flash-latest";
+
+export const CHATGPT_API_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_CHATGPT_MODEL = "gpt-6.1-sol";
+
+/** Model used for the signed-in user's ChatGPT plan, if they connected one. */
+export function chatGptModel(): string {
+  const configured = process.env.CHATGPT_MODEL?.trim();
+  if (configured) return configured;
+  return getAiConnection()?.model ?? DEFAULT_CHATGPT_MODEL;
+}
+
+/** Optional second model on the same ChatGPT account. */
+export function chatGptFallbackModel(): string | null {
+  const configured = process.env.CHATGPT_FALLBACK_MODEL?.trim();
+  return configured && configured.length > 0 ? configured : null;
+}
+
+/**
+ * Vision is never inferred from a text model. It requires an explicit pin.
+ * A per-connection `visionModel` is honored when a flow recorded one, but the
+ * standard connection flow leaves it null unless CHATGPT_VISION_MODEL is set.
+ */
+export function chatGptVisionModel(): string | null {
+  const configured = process.env.CHATGPT_VISION_MODEL?.trim();
+  if (configured) return configured;
+  return getAiConnection()?.visionModel ?? null;
+}
 
 /**
  * Models we know about. This is metadata only — it drives capability detection
@@ -138,6 +171,7 @@ export const KNOWN_MODELS: Record<string, ModelDescriptor> = {
 };
 
 export function primaryModel(): string {
+  if (activeProvider() === "chatgpt") return chatGptModel();
   if (activeProvider() === "gemini") {
     const configured = process.env.GEMINI_MODEL?.trim();
     return configured && configured.length > 0 ? configured : DEFAULT_GEMINI_MODEL;
@@ -147,6 +181,9 @@ export function primaryModel(): string {
 }
 
 export function fallbackModel(): string {
+  if (activeProvider() === "chatgpt") {
+    return chatGptFallbackModel() ?? chatGptModel();
+  }
   if (activeProvider() === "gemini") {
     const configured = process.env.GEMINI_FALLBACK_MODEL?.trim();
     return configured && configured.length > 0 ? configured : DEFAULT_GEMINI_FALLBACK_MODEL;
@@ -157,7 +194,9 @@ export function fallbackModel(): string {
 
 export function isAiConfigured(): boolean {
   return Boolean(
-    process.env.OPENROUTER_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim(),
+    getAiConnection()?.planUsage ||
+      process.env.OPENROUTER_API_KEY?.trim() ||
+      process.env.GEMINI_API_KEY?.trim(),
   );
 }
 
@@ -193,6 +232,10 @@ export function describeModel(id: string): ModelDescriptor {
  * resolves automatically; an explicit image override still wins when set.
  */
 export function visionModel(): string | null {
+  if (activeProvider() === "chatgpt") {
+    return chatGptVisionModel();
+  }
+
   const configured =
     activeProvider() === "gemini"
       ? process.env.GEMINI_IMAGE_MODEL?.trim()

@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { ChatGptConnection } from "@/components/dashboard/chatgpt-connection";
 import { errorMessage } from "@/lib/api/client";
 import { deleteUserAccount, getUserProfile, updateUserProfile } from "@/lib/data";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -137,6 +138,8 @@ await updateUserProfile({ settings: patch as unknown as UserSettings });
           />
         </div>
       </Card>
+
+      <ChatGptConnection />
 
       <Card variant="glass" padding="md">
         <h2 className="text-sm font-semibold tracking-tight text-ink">What this deployment can do</h2>

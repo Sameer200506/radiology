@@ -87,7 +87,7 @@ Landing page
 | Auth | Firebase Authentication | Google, email/password, reset |
 | Database | Cloud Firestore | Structured case/analysis documents |
 | Files | Cloud Storage (private) | Never public URLs |
-| AI | OpenRouter, server-side only | Free-tier friendly, single abstraction point |
+| AI | OpenRouter, Google Gemini, or a user's ChatGPT plan | Server-side transport with a single abstraction point |
 
 There is **no** Python, no Express, no separate backend, no Docker. `npm run build` produces
 something Vercel can serve directly.
@@ -129,6 +129,33 @@ survives the free tier churning without a redeploy. Pin a specific id when you w
 On failure the client walks a chain of models, classifies the HTTP status into a safe user-facing
 message, and retries with jittered backoff. Provider error bodies are logged server-side and never
 serialised to the browser.
+
+### Per-user ChatGPT plan (optional)
+
+Any signed-in user can connect their own ChatGPT Plus or Pro account from **Settings → ChatGPT
+account**. Once connected, that user's AI requests are sent to the Responses API with their own
+OAuth token, `store: false`, and streaming enabled, so usage is billed to their ChatGPT plan rather
+than this deployment's key. Everyone else keeps using the deployment provider.
+
+The connection takes precedence over the deployment key. If the user's plan is exhausted, plan
+usage was not approved, or the token was revoked, the request fails with a clear reconnect message
+instead of silently falling back to shared AI.
+
+Two constraints follow from OpenAI's sign-in flow:
+
+- **Local development** uses OpenAI's dynamic registration. The callback must be served from
+  `127.0.0.1`, which the app does automatically even when you browse at `localhost`. Keep
+  `NEXT_PUBLIC_APP_URL` set to the origin you actually use (default `http://localhost:3000`); the
+  callback hands the connection back to that origin, where your session cookie lives.
+- **Hosted deployments** need an OpenAI-approved client ID and redirect URI, set via
+  `OPENAI_SIWC_CLIENT_ID` and `OPENAI_SIWC_REDIRECT_URI`. Without one, the Settings card reports the
+  feature as unavailable.
+
+Connection tokens live in encrypted, chunked httpOnly cookies bound to the Firebase uid; they are
+never written to localStorage or Firestore. Set `AI_CONNECTION_SECRET` so the cookie key does not
+change when an AI provider key rotates. See `.env.example` for the optional model pins
+(`CHATGPT_MODEL`, `CHATGPT_FALLBACK_MODEL`, `CHATGPT_VISION_MODEL`); vision is never inferred from a
+text model.
 
 ---
 
@@ -285,6 +312,11 @@ OPENROUTER_API_KEY=
 OPENROUTER_MODEL=auto
 OPENROUTER_FALLBACK_MODEL=auto
 
+# Optional: per-user ChatGPT plan connections
+AI_CONNECTION_SECRET=
+OPENAI_SIWC_CLIENT_ID=
+OPENAI_SIWC_REDIRECT_URI=
+
 # App URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -365,6 +397,12 @@ deployment capabilities panel reports AI and image analysis correctly.
 | `GEMINI_FALLBACK_MODEL` | Configuration. Default `gemini-flash-latest` | Server only |
 | `GEMINI_IMAGE_MODEL` | Optional vision override | Server only |
 | `GEMINI_TIMEOUT_MS` / `GEMINI_MAX_TOKENS` | Optional. Provider-scoped tuning | Server only |
+| `AI_CONNECTION_SECRET` | Long random secret for ChatGPT connection cookies | **Server only** |
+| `OPENAI_SIWC_CLIENT_ID` | OpenAI-approved client ID for a hosted deployment | Server only |
+| `OPENAI_SIWC_REDIRECT_URI` | Registered HTTPS callback for that client | Server only |
+| `OPENAI_AGENT_HOST_ID` | Optional stable dynamic-registration host id | Server only |
+| `CHATGPT_MODEL` / `CHATGPT_FALLBACK_MODEL` | Optional ChatGPT model pins | Server only |
+| `CHATGPT_VISION_MODEL` | Optional vision-capable ChatGPT model pin | Server only |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase console → Service accounts | **Server only** |
 | `FIREBASE_ADMIN_PROJECT_ID` / `_CLIENT_EMAIL` / `_PRIVATE_KEY` | same, split form | **Server only** |
 | `FIREBASE_STORAGE_BUCKET` | Optional Admin bucket override | Server only |
@@ -372,7 +410,9 @@ deployment capabilities panel reports AI and image analysis correctly.
 
 **Required:** the six `NEXT_PUBLIC_FIREBASE_*` values, one AI provider key (`OPENROUTER_API_KEY`
 **or** `GEMINI_API_KEY`), and `NEXT_PUBLIC_APP_URL`. Everything Firebase Admin is optional — it
-only lengthens the session cookie.
+only lengthens the session cookie. The per-user ChatGPT connection is optional too: it only changes
+which plan pays for a connected user's requests, and does not replace the deployment key for
+everyone else.
 
 The `NEXT_PUBLIC_FIREBASE_*` values are designed to be public — they identify the project and
 authorise the client SDK. Security comes from Authentication plus Security Rules, never from
@@ -509,6 +549,13 @@ reported.
 
 **Error handling.** Provider internals, stack traces and Firestore error text are logged
 server-side and never returned. Every user-facing message is safe to display.
+
+**ChatGPT connection tokens.** OAuth access and refresh tokens are sealed with AES-256-GCM and
+stored in chunked httpOnly cookies. The Firebase uid is the associated data, so copying a cookie to
+another account does not decrypt into a usable connection. Tokens never enter localStorage, client
+JavaScript, or Firestore. Refresh tokens rotate and last 30 days; disconnecting revokes the refresh
+token with OpenAI and clears the cookie. Set `AI_CONNECTION_SECRET` to keep the encryption key
+stable and independent of provider-key rotation.
 
 **Audit trail.** Every analysis stores model, prompt version, latency, token counts, whether the
 fallback model or a repair was used, which input categories were present, which triage rules fired,

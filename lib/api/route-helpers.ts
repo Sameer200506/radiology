@@ -5,7 +5,10 @@ import { NextResponse } from "next/server";
 import type { AiErrorCode, AiErrorBody } from "@/types/ai";
 import { AiError, isAiError, toSafeAiError } from "@/lib/ai/openrouter";
 import { RATE_LIMITS, identityFromRequest, rateLimit, type RateLimitName } from "@/lib/security/rate-limit";
-import { getSessionUser, type SessionUser } from "@/lib/auth/session";
+import { getSessionUser, isSecureRequest, type SessionUser } from "@/lib/auth/session";
+import { readChatGptConnection } from "@/lib/ai/chatgpt-connection";
+import { runWithAiContext } from "@/lib/ai/context";
+import type { ChatGptConnection } from "@/lib/ai/chatgpt-types";
 
 export class ConfigurationError extends Error {
   constructor(message: string) {
@@ -153,7 +156,29 @@ export function guardedRoute<TParams = Record<string, string>>(
           : (candidate ?? {})
       ) as TParams;
 
-      return await handler({ user: user as SessionUser, request, params });
+      /*
+       * AI routes carry the signed-in user's ChatGPT connection (when one is
+       * stored in its encrypted cookie) in a request-scoped context. Reading it
+       * here means every existing stage gets the user's own plan without
+       * threading a provider argument through the whole pipeline.
+       *
+       * A corrupt/invalid cookie is treated as "not connected" rather than
+       * failing the request; the user can reconnect from Settings.
+       */
+      let chatgpt: ChatGptConnection | null = null;
+      const pathname = new URL(request.url).pathname;
+      if (user && pathname.startsWith("/api/ai/")) {
+        try {
+          chatgpt = await readChatGptConnection(user.uid);
+        } catch {
+          chatgpt = null;
+        }
+      }
+
+      return await runWithAiContext(
+        { chatgpt, secure: isSecureRequest(request) },
+        () => handler({ user: user as SessionUser, request, params }),
+      );
     } catch (error) {
       return jsonFromError(error);
     }

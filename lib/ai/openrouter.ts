@@ -32,6 +32,8 @@ import {
 } from "@/lib/ai/models";
 import { extractJson } from "@/lib/ai/extract-json";
 import { callGemini } from "@/lib/ai/gemini";
+import { callChatGpt } from "@/lib/ai/chatgpt";
+import { getAiConnection } from "@/lib/ai/context";
 import {
   AiError,
   isAbortError,
@@ -361,6 +363,9 @@ function callProvider(
   options: CompletionOptions,
   timeoutMs: number,
 ): Promise<CompletionResult> {
+  if (activeProvider() === "chatgpt") {
+    return callChatGpt(model, options, timeoutMs);
+  }
   return activeProvider() === "gemini"
     ? callGemini(model, options, timeoutMs)
     : callOpenRouter(model, options, timeoutMs);
@@ -373,6 +378,18 @@ function callProvider(
  * one immediate retry per model for retryable failures, then the fallback model.
  */
 export async function complete(options: CompletionOptions): Promise<CompletionResult> {
+  const connection = getAiConnection();
+  if (connection && !connection.planUsage) {
+    throw new AiError({
+      code: "AI_CONNECTION_REQUIRED",
+      message:
+        "Your ChatGPT account is connected, but ChatGPT plan usage was not authorized. Reconnect it in Settings and approve plan usage.",
+      status: 401,
+      retryable: false,
+      internalDetail: "ChatGPT connection exists but chatgpt.tokens.use.direct was not granted",
+    });
+  }
+
   if (!isAiConfigured()) {
     throw new AiError({
       code: "AI_NOT_CONFIGURED",
